@@ -61,7 +61,6 @@ cover/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
-
 # Flask stuff:
 instance/
 .webassets-cache
@@ -170,4 +169,5 @@ poetry.toml
 # LSP config files
 pyrightconfig.json
 
-# End of https://www.toptal.com/developers/gitignore/api/python
+
+*.db
