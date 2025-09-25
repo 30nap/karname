@@ -1,8 +1,8 @@
-📊 Karname
+# 📊 Karname
 
 Karname is a simple app that lets users log their daily activities using their voice — for example, "I read for 20 minutes today." The app processes the voice input, extracts activity data, and generates insightful weekly/monthly reports to help users stay on track with their habits.
 
-🎯 Features
+# 🎯 Features
 
 - 🎙️ Voice input for logging activities
 - 🧠 Natural language processing (NLP) to extract time/activity from speech
@@ -11,66 +11,39 @@ Karname is a simple app that lets users log their daily activities using their v
 - 📝 Customizable activity types (e.g., reading, exercising, studying, etc.)
 - 📅 Calendar view of past activities
 
-🚀 Getting Started
-
-Prerequisites
+# 🚀 Getting Started
+## Prerequisites
 
 - Python
 - Mobile SDK
 
-Installation
-git clone https://github.com/30nap/karname.git
-cd karname
-# Install dependencies
-
-
-🗣️ Usage
-
-Press the record button in the app.
-
-Say something like:
-
-"I read a book for 30 minutes today."
-
-"I studied math for 1 hour."
-
-The app will:
-
-Convert your speech to text
-
-Extract the activity and duration
-
-Log the data in your activity history
-
-Go to the Reports section to see your weekly/monthly summaries.
-
-
-📅 Report Sample
+# 📅 Report Sample
 
 Activity	Total Time (This Month)
 Reading	    7 hrs 20 mins
 Studying	5 hrs 10 mins
 Exercise	3 hrs 45 mins
 
-🛠️ Built With
+# 🛠️ Built With
 
 - [Flutter] – Mobile App
 - [VoskModel] – Voice recognition Model
 - [FastAPI] – Backend API
 - [SQLite] – Data storage
 
-📌 Roadmap
+# 📌 Roadmap
 
 - Add reminders / notifications
 - Add goal setting (e.g. 10 hours of reading per month)
 - Cloud sync and user accounts
 - Export data to CSV / PDF
 
-🤝 Contributing
+# 🤝 Contributing
 
 Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change.
 
-📬 Contact
+# 📬 Contact
 
 Made with ❤️ by Bozorgmehr Zia & Sina Pezeshki
+
 Feel free to reach out: bozorgmehr1381@gmail.com & pezeshki.sina.dev@gmail.com
