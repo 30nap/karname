@@ -1,6 +1,6 @@
 # 📊 Karname
 
-Karname is a simple app that lets users log their daily activities using their voice — for example, "I read for 20 minutes today." The app processes the voice input, extracts activity data, and generates insightful weekly/monthly reports to help users stay on track with their habits.
+Karname is a simple app that lets users log their daily activities using their voice, for example, "I read for 20 minutes today." The app processes the voice input, extracts activity data, and generates insightful weekly/monthly reports to help users stay on track with their habits.
 
 # 🎯 Features
 
@@ -50,3 +50,4 @@ Feel free to reach out: bozorgmehr1381@gmail.com & pezeshki.sina.dev@gmail.com
 
 # All Rights Reserved.
 Copyright (c) 2025 Sina Pezeshki and Bozorgmehr Zia
+
