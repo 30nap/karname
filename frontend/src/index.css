@@ -1,0 +1,5 @@
+@import 'tailwindcss';
+
+html {
+  font-family: 'Vazirmatn Variable', system-ui, sans-serif;
+}

@@ -1,0 +1,71 @@
+spring:
+  application:
+    name: karname
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${KARNAME_DB_URL:jdbc:postgresql://localhost:5432/karname}
+    username: ${KARNAME_DB_USER:karname}
+    password: ${KARNAME_DB_PASSWORD:karname}
+    hikari:
+      maximum-pool-size: ${KARNAME_DB_POOL_SIZE:10}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+  session:
+    timeout: ${KARNAME_SESSION_TIMEOUT:12h}
+    jdbc:
+      initialize-schema: never
+  messages:
+    basename: messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
+  mvc:
+    problemdetails:
+      enabled: true
+
+server:
+  port: ${KARNAME_PORT:8080}
+  shutdown: graceful
+  forward-headers-strategy: framework
+  servlet:
+    session:
+      cookie:
+        name: KARNAME_SESSION
+        http-only: true
+        same-site: lax
+        secure: ${KARNAME_COOKIE_SECURE:false}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+karname:
+  timezone: ${KARNAME_TIMEZONE:Asia/Tehran}
+  security:
+    # Base64-encoded 32-byte key for AES-GCM encryption of stored API keys.
+    # Required in production; generate with: openssl rand -base64 32
+    secret-key: ${KARNAME_SECRET_KEY:}
+    remember-me-duration: ${KARNAME_REMEMBER_ME_DURATION:30d}
+    login-max-attempts: ${KARNAME_LOGIN_MAX_ATTEMPTS:5}
+    login-lockout: ${KARNAME_LOGIN_LOCKOUT:15m}
