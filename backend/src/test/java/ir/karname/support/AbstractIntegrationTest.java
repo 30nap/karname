@@ -47,6 +47,7 @@ public abstract class AbstractIntegrationTest {
     private static final List<String> CLEANUP = List.of(
             "DELETE FROM spring_session",
             "DELETE FROM users",
+            "DELETE FROM prices",
             "DELETE FROM app_settings");
 
     static {

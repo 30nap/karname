@@ -1,0 +1,8 @@
+package ir.karname.account;
+
+/** Iranian banks and credit institutions (names are rendered by the frontend). */
+public enum Bank {
+    MELLI, MELLAT, SADERAT, TEJARAT, SEPAH, KESHAVARZI, MASKAN, REFAH, POST, TOSEE_SADERAT, TOSEE_TAAVON,
+    SANAT_MADAN, PASARGAD, SAMAN, PARSIAN, EGHTESAD_NOVIN, KARAFARIN, SINA, SHAHR, DAY, SARMAYEH, AYANDEH,
+    GARDESHGARI, IRAN_ZAMIN, KHAVARMIANEH, MEHR_IRAN, RESALAT, MELAL, NOOR, BLU, OTHER
+}
