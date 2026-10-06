@@ -1,6 +1,10 @@
 spring:
   application:
     name: karname
+  autoconfigure:
+    exclude:
+      # Authentication is handled by AuthController; no in-memory default user.
+      - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
   threads:
     virtual:
       enabled: true
@@ -31,18 +35,15 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+  jackson:
+    deserialization:
+      # Jackson 3 rejects absent primitives by default; absent booleans in requests mean "false".
+      fail-on-null-for-primitives: false
 
 server:
   port: ${KARNAME_PORT:8080}
   shutdown: graceful
   forward-headers-strategy: framework
-  servlet:
-    session:
-      cookie:
-        name: KARNAME_SESSION
-        http-only: true
-        same-site: lax
-        secure: ${KARNAME_COOKIE_SECURE:false}
 
 management:
   endpoints:
@@ -69,3 +70,5 @@ karname:
     remember-me-duration: ${KARNAME_REMEMBER_ME_DURATION:30d}
     login-max-attempts: ${KARNAME_LOGIN_MAX_ATTEMPTS:5}
     login-lockout: ${KARNAME_LOGIN_LOCKOUT:15m}
+    cookie-secure: ${KARNAME_COOKIE_SECURE:false}
+    secret-key-file: ${KARNAME_SECRET_KEY_FILE:./data/secret.key}

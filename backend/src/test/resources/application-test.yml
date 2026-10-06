@@ -1,0 +1,13 @@
+spring:
+  main:
+    banner-mode: off
+
+karname:
+  security:
+    # Fixed key for tests only.
+    secret-key: 1SYZTDQWMCfNQn8hxDBaoITCTdTH2jlG6ZUKyZIuAMY=
+
+logging:
+  level:
+    root: WARN
+    ir.karname: INFO

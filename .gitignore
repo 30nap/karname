@@ -34,3 +34,6 @@ deploy/backups/
 
 # Misc
 screenshots-tmp/
+
+# Local runtime data (generated secret key file)
+backend/data/
