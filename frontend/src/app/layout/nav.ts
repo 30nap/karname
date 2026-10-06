@@ -1,4 +1,4 @@
-import { ArrowLeftRight, ChartPie, Coins, FileText, Flag, Landmark, LayoutDashboard, PiggyBank, Repeat, Settings, Tags, WalletCards, type LucideIcon } from 'lucide-react'
+import { ArrowLeftRight, ChartPie, Coins, DatabaseBackup, FileText, Flag, Landmark, LayoutDashboard, PiggyBank, Repeat, Settings, Tags, WalletCards, type LucideIcon } from 'lucide-react'
 
 export interface NavItem {
   to: string
@@ -46,6 +46,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'سیستم',
     items: [
       { to: '/categories', label: 'دسته‌بندی‌ها', icon: Tags },
+      { to: '/data', label: 'ورود و خروج داده', icon: DatabaseBackup },
       { to: '/settings', label: 'تنظیمات', icon: Settings },
     ],
   },

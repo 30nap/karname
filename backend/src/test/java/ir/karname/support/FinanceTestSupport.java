@@ -15,6 +15,7 @@ import ir.karname.transaction.TransactionType;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -70,6 +71,6 @@ public abstract class FinanceTestSupport extends AbstractIntegrationTest {
     }
 
     protected void globalPrice(String code, String priceToman, Instant at) {
-        priceService.recordAutomatic(commodityService.require(0, code), new BigDecimal(priceToman), at, "TEST");
+        priceService.recordFetched(commodityService.require(0, code), new BigDecimal(priceToman), at, "TEST", Duration.ZERO);
     }
 }

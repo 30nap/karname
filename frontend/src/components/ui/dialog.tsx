@@ -14,7 +14,8 @@ export function DialogContent({ className, children, ...props }: ComponentProps<
       <DialogPrimitive.Overlay className="kn-overlay fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px]" />
       <DialogPrimitive.Content
         className={cn(
-          'fixed z-50 flex max-h-[92dvh] w-full flex-col overflow-hidden bg-card text-card-foreground shadow-xl outline-none',
+          // overflow-clip, not hidden: a hidden box can still be scrolled by focus, which slid headers out of view
+          'fixed z-50 flex max-h-[92dvh] w-full flex-col overflow-clip bg-card text-card-foreground shadow-xl outline-none',
           'inset-x-0 bottom-0 rounded-t-2xl border-t',
           'sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:border',
           'kn-dialog-content',
@@ -33,7 +34,7 @@ export function DialogContent({ className, children, ...props }: ComponentProps<
 }
 
 export function DialogHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('flex flex-col gap-1 px-5 pt-4 pe-12', className)} {...props} />
+  return <div className={cn('flex shrink-0 flex-col gap-1 px-5 pt-4 pe-12', className)} {...props} />
 }
 
 export function DialogBody({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
@@ -41,7 +42,7 @@ export function DialogBody({ className, ...props }: HTMLAttributes<HTMLDivElemen
 }
 
 export function DialogFooter({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('flex flex-col-reverse gap-2 border-t px-5 py-3 sm:flex-row sm:justify-end safe-bottom', className)} {...props} />
+  return <div className={cn('flex shrink-0 flex-col-reverse gap-2 border-t px-5 py-3 sm:flex-row sm:justify-end safe-bottom', className)} {...props} />
 }
 
 export function DialogTitle({ className, ...props }: ComponentProps<typeof DialogPrimitive.Title>) {

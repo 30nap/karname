@@ -35,6 +35,11 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+  servlet:
+    multipart:
+      # backups of years of data; statement imports are capped at 5 MB in code
+      max-file-size: 50MB
+      max-request-size: 52MB
   jackson:
     deserialization:
       # Jackson 3 rejects absent primitives by default; absent booleans in requests mean "false".

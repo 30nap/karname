@@ -15,6 +15,7 @@ import { useFormat } from '@/app/preferences'
 import { useMe } from '@/features/auth/api'
 import type { AdminUser } from '@/lib/api/types'
 import { useAdminUsers, useDeleteAdminUser, useResetUserPassword, useSystemSettings, useUpdateAdminUser, useUpdateSystemSettings } from './api'
+import { PriceSourcesCard } from './PriceSources'
 
 export function AdminSettings() {
   const me = useMe()
@@ -44,6 +45,8 @@ export function AdminSettings() {
           </label>
         </CardContent>
       </Card>
+
+      <PriceSourcesCard />
 
       <Card>
         <CardHeader>

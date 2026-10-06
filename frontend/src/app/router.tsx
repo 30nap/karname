@@ -34,6 +34,7 @@ export const routes: RouteObject[] = [
               { path: 'cheques', lazy: () => import('@/features/cheques/ChequesPage').then((m) => ({ Component: m.ChequesPage })) },
               { path: 'assets', lazy: () => import('@/features/commodities/AssetsPage').then((m) => ({ Component: m.AssetsPage })) },
               { path: 'categories', lazy: () => import('@/features/categories/CategoriesPage').then((m) => ({ Component: m.CategoriesPage })) },
+              { path: 'data', lazy: () => import('@/features/data/DataPage').then((m) => ({ Component: m.DataPage })) },
               { path: 'settings', lazy: () => import('@/features/settings/SettingsPage').then((m) => ({ Component: m.SettingsPage })) },
               { path: '*', Component: NotFoundPage },
             ],

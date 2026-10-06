@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api/client'
-import type { AdminUser, AuthStatus, Me, Role } from '@/lib/api/types'
+import { api, query } from '@/lib/api/client'
+import type { AdminUser, AuthStatus, Me, PriceRunResult, PriceSource, PriceSourceInput, Role } from '@/lib/api/types'
 import { authStatusKey } from '@/features/auth/api'
+import { invalidateFinance } from '@/features/transactions/invalidate'
 
 export function useChangePassword() {
   return useMutation({
@@ -97,6 +98,52 @@ export function useUpdateSystemSettings() {
     onSuccess: (data) => {
       queryClient.setQueryData(systemKey, data)
       queryClient.invalidateQueries({ queryKey: authStatusKey })
+    },
+  })
+}
+
+const priceSourcesKey = ['admin', 'price-sources'] as const
+
+export function usePriceSources(enabled: boolean) {
+  return useQuery({ queryKey: priceSourcesKey, queryFn: () => api.get<PriceSource[]>('/admin/price-sources'), enabled })
+}
+
+export function useSavePriceSource() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...input }: PriceSourceInput & { id?: number }) =>
+      id ? api.put<PriceSource>(`/admin/price-sources/${id}`, input) : api.post<PriceSource>('/admin/price-sources', input),
+    meta: { toastError: false },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: priceSourcesKey }),
+  })
+}
+
+export function useDeletePriceSource() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.delete<void>(`/admin/price-sources/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: priceSourcesKey }),
+  })
+}
+
+/** Dry run of a form's configuration; with an id, header values left empty come from the stored source. */
+export function useTestPriceSource() {
+  return useMutation({
+    mutationFn: ({ id, ...input }: PriceSourceInput & { id?: number }) =>
+      api.post<PriceRunResult>(`/admin/price-sources/test${query({ id })}`, input),
+    meta: { toastError: false },
+  })
+}
+
+/** Fetches one source now, or all enabled ones; new prices refresh every valuation. */
+export function useRunPriceSources() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number | 'all') =>
+      id === 'all' ? api.post<PriceRunResult[]>('/admin/price-sources/run-all') : api.post<PriceRunResult>(`/admin/price-sources/${id}/run`).then((r) => [r]),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: priceSourcesKey })
+      await invalidateFinance(queryClient)
     },
   })
 }

@@ -545,3 +545,97 @@ export interface AppNotification {
   createdAt: string
   read: boolean
 }
+
+export type PriceSourceKind = 'NOBITEX' | 'JSON'
+export type PriceUnit = 'RIAL' | 'TOMAN'
+
+export interface PriceMapping {
+  commodity: string
+  /** Coin symbol for Nobitex (usdt), JSON Pointer for other APIs (/data/gold18/price). */
+  path: string
+  multiplier: string | null
+}
+
+export interface PriceSource {
+  id: number
+  name: string
+  kind: PriceSourceKind
+  url: string | null
+  unit: PriceUnit
+  headers: { name: string; hasValue: boolean }[]
+  mappings: PriceMapping[]
+  intervalMinutes: number
+  enabled: boolean
+  lastRunAt: string | null
+  lastSuccessAt: string | null
+  lastError: string | null
+  lastCount: number | null
+  nextRunAt: string | null
+}
+
+export interface PriceSourceInput {
+  name: string
+  kind: PriceSourceKind
+  url: string | null
+  unit: PriceUnit
+  /** A header without a value keeps its stored value. */
+  headers: { name: string; value: string | null }[]
+  mappings: PriceMapping[]
+  intervalMinutes: number
+  enabled: boolean
+}
+
+export interface QuoteResult {
+  commodity: string
+  path: string
+  raw: string | null
+  priceToman: string | null
+  error: string | null
+}
+
+export interface PriceRunResult {
+  error: string | null
+  results: QuoteResult[]
+  recorded: number
+}
+
+export type DateStyle = 'AUTO' | 'JALALI' | 'GREGORIAN'
+
+export interface ImportMapping {
+  date: number | null
+  description: number | null
+  amount: number | null
+  debit: number | null
+  credit: number | null
+  dateStyle: DateStyle
+  unit: PriceUnit
+  hasHeader: boolean
+}
+
+export interface ImportRow {
+  line: number
+  date: string | null
+  /** Signed Toman: negative for money out. */
+  amount: string | null
+  description: string | null
+  categoryId: number | null
+  duplicate: boolean
+  ref: string | null
+  error: string | null
+}
+
+export interface ImportPreview {
+  headers: string[]
+  sample: string[][]
+  mapping: ImportMapping
+  rows: ImportRow[]
+}
+
+export interface ImportCommitResult {
+  created: number
+  skipped: number
+}
+
+export interface RestoreSummary {
+  rows: Record<string, number>
+}

@@ -9,7 +9,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Timestamp;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -120,11 +122,55 @@ public class PriceService {
         return prices.save(new Price(commodity.getId(), global ? null : userId, normalize(priceToman), at, Price.SOURCE_MANUAL, null));
     }
 
-    /** Records a price fetched from an automatic source (instance-wide). */
+    private record Fetched(BigDecimal price, Instant at) {
+    }
+
+    /**
+     * Records a price fetched from an automatic source (instance-wide), unless the source's last
+     * price for the commodity is the same and younger than {@code confirmEvery}: an unchanged
+     * price is re-recorded only that often, enough to show it is current. Returns whether a row was added.
+     */
     @Transactional
-    public Price recordAutomatic(Commodity commodity, BigDecimal priceToman, Instant pricedAt, String source) {
+    public boolean recordFetched(Commodity commodity, BigDecimal priceToman, Instant pricedAt, String source, Duration confirmEvery) {
         validate(commodity, priceToman);
-        return prices.save(new Price(commodity.getId(), null, normalize(priceToman), pricedAt, source, null));
+        BigDecimal price = normalize(priceToman);
+        boolean unchanged = jdbc.sql("""
+                        SELECT price_toman, priced_at FROM prices
+                        WHERE commodity_id = ? AND user_id IS NULL AND source = ?
+                        ORDER BY priced_at DESC, id DESC LIMIT 1
+                        """)
+                .params(commodity.getId(), source)
+                .query((rs, n) -> new Fetched(rs.getBigDecimal(1), rs.getTimestamp(2).toInstant()))
+                .optional()
+                .filter(last -> last.price().compareTo(price) == 0 && last.at().isAfter(pricedAt.minus(confirmEvery)))
+                .isPresent();
+        if (unchanged) {
+            return false;
+        }
+        prices.save(new Price(commodity.getId(), null, price, pricedAt, source, null));
+        return true;
+    }
+
+    /**
+     * Thins fetched prices older than {@code keepAll} to the last one of each day (in {@code zone})
+     * per commodity and source, so years of half-hourly fetches stay small. Manual and implied
+     * prices are never touched. Returns the number of rows removed.
+     */
+    @Transactional
+    public int thinFetched(Duration keepAll, ZoneId zone) {
+        return jdbc.sql("""
+                DELETE FROM prices p USING (
+                    SELECT id, row_number() OVER (
+                        PARTITION BY commodity_id, source, (priced_at AT TIME ZONE :zone)::date
+                        ORDER BY priced_at DESC, id DESC) AS rn
+                    FROM prices
+                    WHERE user_id IS NULL AND source NOT IN ('MANUAL', 'TRANSACTION') AND priced_at < :before
+                ) old
+                WHERE p.id = old.id AND old.rn > 1
+                """)
+                .param("zone", zone.getId())
+                .param("before", Timestamp.from(clock.instant().minus(keepAll)))
+                .update();
     }
 
     /** Records the price implied by an exchange transaction (e.g. a coin bought for 80M Toman). */

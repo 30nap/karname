@@ -51,7 +51,9 @@ export const API_BASE = '/api/v1'
 
 export async function apiRequest<T>(method: string, path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' }
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  // FormData sets its own multipart boundary
+  const form = body instanceof FormData
+  if (body !== undefined && !form) headers['Content-Type'] = 'application/json'
   if (method !== 'GET' && method !== 'HEAD') {
     const token = readCookie('XSRF-TOKEN')
     if (token) headers['X-XSRF-TOKEN'] = token
@@ -61,7 +63,7 @@ export async function apiRequest<T>(method: string, path: string, body?: unknown
     response = await fetch(API_BASE + path, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : form ? body : JSON.stringify(body),
       credentials: 'same-origin',
       signal: options.signal,
     })
@@ -86,6 +88,8 @@ export const api = {
   put: <T>(path: string, body?: unknown, options?: RequestOptions) => apiRequest<T>('PUT', path, body ?? {}, options),
   patch: <T>(path: string, body?: unknown, options?: RequestOptions) => apiRequest<T>('PATCH', path, body ?? {}, options),
   delete: <T>(path: string, body?: unknown, options?: RequestOptions) => apiRequest<T>('DELETE', path, body, options),
+  /** Multipart POST, for file uploads. */
+  upload: <T>(path: string, form: FormData, options?: RequestOptions) => apiRequest<T>('POST', path, form, options),
 }
 
 /** Builds a query string, skipping empty values. */

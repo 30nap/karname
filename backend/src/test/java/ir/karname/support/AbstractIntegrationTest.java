@@ -48,7 +48,9 @@ public abstract class AbstractIntegrationTest {
             "DELETE FROM spring_session",
             "DELETE FROM users",
             "DELETE FROM prices",
-            "DELETE FROM app_settings");
+            "DELETE FROM app_settings",
+            // the Nobitex source seeded by V5 stays; tests add their own
+            "DELETE FROM price_sources WHERE name <> 'نوبیتکس'");
 
     static {
         String external = System.getenv("KARNAME_TEST_DB_URL");

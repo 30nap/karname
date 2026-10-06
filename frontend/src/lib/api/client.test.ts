@@ -23,6 +23,19 @@ describe('api client', () => {
     expect(fetchMock.mock.calls[1][1].headers['X-XSRF-TOKEN']).toBeUndefined()
   })
 
+  it('uploads files as multipart, letting the browser set the boundary', async () => {
+    document.cookie = 'XSRF-TOKEN=abc-123; path=/'
+    const fetchMock = mockFetch(200, { rows: [] })
+    const form = new FormData()
+    form.append('file', new File(['a,b'], 'statement.csv', { type: 'text/csv' }))
+    await api.upload('/io/import/preview', form)
+    const init = fetchMock.mock.calls[0][1]
+    expect(init.method).toBe('POST')
+    expect(init.body).toBe(form)
+    expect(init.headers['Content-Type']).toBeUndefined()
+    expect(init.headers['X-XSRF-TOKEN']).toBe('abc-123')
+  })
+
   it('turns problem details into ApiError with Persian detail', async () => {
     mockFetch(400, { detail: 'بعضی از مقادیر واردشده معتبر نیستند.', code: 'error.validation', errors: [{ field: 'amount', message: 'الزامی است.' }] })
     const error = (await api.post('/transactions', {}).catch((e: unknown) => e)) as ApiError

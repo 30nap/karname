@@ -1,6 +1,7 @@
-import { AlertTriangle, Coins, History, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, Coins, History, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import Big from 'big.js'
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -20,7 +21,8 @@ import { MoneyInput } from '@/components/finance/MoneyInput'
 import { JalaliDatePicker } from '@/components/finance/JalaliDatePicker'
 import { useAccounts } from '@/features/accounts/api'
 import { useFormat, usePrefs } from '@/app/preferences'
-import { useMe } from '@/features/auth/api'
+import { useAuthStatus, useMe } from '@/features/auth/api'
+import { useRunPriceSources } from '@/features/settings/api'
 import type { Commodity, CommodityKind } from '@/lib/api/types'
 import { fromDisplayAmount, IRT, sumAmounts } from '@/lib/format/money'
 import { todayIso } from '@/lib/jalali'
@@ -192,7 +194,31 @@ function CommodityRow({ commodity: c, holding, onSelect }: { commodity: Commodit
   )
 }
 
+/** Admins fetch all automatic sources now; without an enabled source, points to the settings. */
+function RefreshPricesButton() {
+  const f = useFormat()
+  const navigate = useNavigate()
+  const run = useRunPriceSources()
+  return (
+    <Button variant="outline" loading={run.isPending} onClick={() => run.mutate('all', {
+      onSuccess: (results) => {
+        if (results.length === 0) {
+          toast.info('هیچ منبع قیمت خودکاری روشن نیست.', { action: { label: 'تنظیمات', onClick: () => navigate('/settings?tab=admin') } })
+          return
+        }
+        const fetched = results.reduce((n, r) => n + r.results.filter((x) => !x.error).length, 0)
+        const failed = results.filter((r) => r.error)
+        if (failed.length > 0) toast.error(`${f.number(failed.length)} منبع پاسخ نداد: ${failed[0].error}`)
+        else toast.success(`${f.number(fetched)} قیمت به‌روز شد.`)
+      },
+    })}>
+      <RefreshCw />به‌روزرسانی قیمت‌ها
+    </Button>
+  )
+}
+
 export function AssetsPage() {
+  const admin = useAuthStatus().data?.user?.role === 'ADMIN'
   const { data: commodities, isPending } = useCommodities()
   const { holdings, loaded } = useHoldings()
   const [selected, setSelected] = useState<Commodity | null>(null)
@@ -205,7 +231,10 @@ export function AssetsPage() {
   return (
     <>
       <PageHeader title="دارایی‌ها و قیمت‌ها" description="قیمت روز ارز، طلا، سکه و رمزارز برای محاسبه‌ی ارزش دارایی‌ها"
-        actions={<Button variant="outline" onClick={() => setCustomOpen(true)}><Plus />واحد جدید</Button>} />
+        actions={<>
+          {admin ? <RefreshPricesButton /> : null}
+          <Button variant="outline" onClick={() => setCustomOpen(true)}><Plus />واحد جدید</Button>
+        </>} />
       {isPending || !loaded ? <Skeleton className="h-64" /> : (
         <div className="grid gap-4">
           <Segmented<Scope>
