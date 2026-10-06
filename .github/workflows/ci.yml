@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   backend:
-    name: Backend (Java 25)
+    name: Backend (Java 25, Gradle)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -22,9 +22,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
-          cache: maven
+      - uses: gradle/actions/setup-gradle@v5
       # Integration tests start PostgreSQL through Testcontainers (Docker is available on the runner).
-      - run: ./mvnw -B verify
+      - run: ./gradlew build --console=plain
 
   frontend:
     name: Frontend

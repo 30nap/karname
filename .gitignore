@@ -8,8 +8,10 @@ Thumbs.db
 *.swp
 
 # Backend
-backend/target/
-backend/.mvn/wrapper/maven-wrapper.jar
+backend/build/
+backend/.gradle/
+backend/bin/
+.kotlin/
 *.log
 hs_err_pid*
 

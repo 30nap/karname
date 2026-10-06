@@ -1,30 +1,34 @@
-# کارنامه
+# Karname
 
-وب‌اپ فارسی مدیریت مالی و دارایی شخصی با دستیار هوش مصنوعی.
+**Karname** (Persian: «کارنامه», "record") is a self-hosted personal finance and asset
+management web app for Iranian users, with an AI assistant that analyses and explains
+your finances. The user interface is fully Persian (RTL, Solar Hijri calendar, Persian
+digits, Toman amounts).
 
-> این README در حال تکمیل است؛ نسخه‌ی کامل (راه‌اندازی، استقرار و پیکربندی AI) در فاز آخر نوشته می‌شود.
+> This README is a work in progress; the full version (setup, deployment and AI
+> configuration) is written in the final phase.
 
-## ساختار
+## Repository layout
 
-| پوشه | توضیح |
+| Path | Contents |
 |---|---|
-| `backend/` | Spring Boot 4.1 روی Java 25 (Maven) |
+| `backend/` | Spring Boot 4.1 on Java 25 (Gradle, Kotlin DSL) |
 | `frontend/` | React 19 + TypeScript + Vite |
-| `deploy/` | Docker Compose و nginx |
-| `docs/` | مستندات معماری و راهنماها |
+| `deploy/` | Docker Compose and nginx configuration |
+| `docs/` | Architecture notes and guides |
 
-## اجرای محلی (توسعه)
+## Local development
 
-پیش‌نیازها: JDK 25، Node.js 22 با pnpm 10، PostgreSQL 16 (یا Docker).
+Requirements: JDK 25, Node.js 22 with pnpm 10, PostgreSQL 16 (or Docker).
 
 ```bash
-# دیتابیس
-createuser -P karname   # رمز: karname
+# Database
+createuser -P karname   # password: karname
 createdb -O karname karname
 
-# بک‌اند (پورت 8080)
-cd backend && ./mvnw spring-boot:run
+# Backend (port 8080)
+cd backend && ./gradlew bootRun
 
-# فرانت (پورت 5173، درخواست‌های /api به بک‌اند proxy می‌شوند)
+# Frontend (port 5173; /api requests are proxied to the backend)
 cd frontend && pnpm install && pnpm dev
 ```
