@@ -101,8 +101,8 @@ export function AccountDetailPage() {
           <div>
             <h1 className="text-xl font-bold sm:text-2xl">{account.name}</h1>
             <p className="text-sm text-muted-foreground">
-              {ACCOUNT_TYPE_LABELS[account.type]}{account.bank ? ` · بانک ${BANK_NAMES[account.bank]}` : ''}{account.counterparty ? ` · ${account.counterparty}` : ''}
-              {account.commodity !== 'IRT' ? ` · ${commodity.nameFa}` : ''}
+              {ACCOUNT_TYPE_LABELS[account.type]}{account.bank ? ` | بانک ${BANK_NAMES[account.bank]}` : ''}{account.counterparty ? ` | ${account.counterparty}` : ''}
+              {account.commodity !== 'IRT' ? ` | ${commodity.nameFa}` : ''}
             </p>
           </div>
         </div>

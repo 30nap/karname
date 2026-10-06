@@ -23,7 +23,7 @@ function AccountCard({ account }: { account: Account }) {
   const commodities = useCommodityMap()
   const commodity = commodities.get(account.commodity)
   const sub = [account.bank ? `بانک ${BANK_NAMES[account.bank]}` : null, account.counterparty, commodity.code !== 'IRT' ? commodity.nameFa : null]
-    .filter(Boolean).join(' · ')
+    .filter(Boolean).join(' | ')
   return (
     <Link
       to={`/accounts/${account.id}`}

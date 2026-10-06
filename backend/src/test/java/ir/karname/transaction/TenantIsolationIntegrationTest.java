@@ -86,4 +86,49 @@ class TenantIsolationIntegrationTest extends FinanceTestSupport {
         mvc.perform(getAs(alice, "/api/v1/budgets")).andExpect(jsonPath("$.items[0].spent").value("400000"));
         mvc.perform(getAs(alice, "/api/v1/goals/{id}", goalId)).andExpect(jsonPath("$.currentAmount").value("600000"));
     }
+
+    @Test
+    void obligationsAreIsolated() throws Exception {
+        TestUser alice = createUser("alice");
+        TestUser bob = createUser("bob");
+        Account aliceBank = bank(alice, "ملت", "1000000");
+        Account bobBank = bank(bob, "سامان", "1000000");
+        long loan = readJson(mvc.perform(postAs(alice, "/api/v1/loans", Map.of("name", "وام", "principal", "1200000", "annualRate", "0",
+                        "termMonths", 12, "firstDueDate", "2026-09-12", "start", "EXISTING")))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asLong();
+        long rule = readJson(mvc.perform(postAs(alice, "/api/v1/recurring", Map.of("name", "اجاره", "type", "EXPENSE", "accountId",
+                        aliceBank.getId(), "amount", "1000", "frequency", "MONTHLY", "startDate", "2026-09-25", "mode", "REMIND")))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asLong();
+        long cheque = readJson(mvc.perform(postAs(alice, "/api/v1/cheques", Map.of("direction", "ISSUED", "accountId", aliceBank.getId(),
+                        "amount", "1000", "dueDate", "2026-10-08")))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asLong();
+
+        mvc.perform(getAs(bob, "/api/v1/loans/{id}", loan)).andExpect(status().isNotFound());
+        mvc.perform(postAs(bob, "/api/v1/loans/{id}/installments/1/payment", Map.of("accountId", bobBank.getId()), loan)).andExpect(status().isNotFound());
+        mvc.perform(deleteAs(bob, "/api/v1/loans/{id}?withAccount=true", loan)).andExpect(status().isNotFound());
+        mvc.perform(getAs(bob, "/api/v1/loans")).andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(postAs(bob, "/api/v1/loans", Map.of("name", "x", "principal", "1000", "annualRate", "0", "termMonths", 2,
+                "firstDueDate", "2026-11-01", "start", "NEW", "depositAccountId", aliceBank.getId()))).andExpect(status().isNotFound());
+
+        mvc.perform(getAs(bob, "/api/v1/recurring/{id}", rule)).andExpect(status().isNotFound());
+        mvc.perform(postAs(bob, "/api/v1/recurring/{id}/occurrences/2026-09-25/post", Map.of(), rule)).andExpect(status().isNotFound());
+        mvc.perform(postAs(bob, "/api/v1/recurring", Map.of("name", "x", "type", "EXPENSE", "accountId", aliceBank.getId(), "amount", "1",
+                "frequency", "MONTHLY", "startDate", "2026-09-25"))).andExpect(status().isNotFound());
+        mvc.perform(getAs(bob, "/api/v1/recurring/pending")).andExpect(jsonPath("$.length()").value(0));
+
+        mvc.perform(getAs(bob, "/api/v1/cheques/{id}", cheque)).andExpect(status().isNotFound());
+        mvc.perform(postAs(bob, "/api/v1/cheques/{id}/status", Map.of("status", "CLEARED", "accountId", bobBank.getId()), cheque))
+                .andExpect(status().isNotFound());
+        mvc.perform(postAs(bob, "/api/v1/cheques", Map.of("direction", "ISSUED", "accountId", aliceBank.getId(), "amount", "1",
+                "dueDate", "2026-10-08"))).andExpect(status().isNotFound());
+
+        mvc.perform(getAs(bob, "/api/v1/forecast?days=30"))
+                .andExpect(jsonPath("$.events.length()").value(0))
+                .andExpect(jsonPath("$.startBalance").value("1000000"));
+        mvc.perform(getAs(bob, "/api/v1/notifications/count")).andExpect(jsonPath("$.unread").value(0));
+        mvc.perform(getAs(alice, "/api/v1/notifications/count")).andExpect(jsonPath("$.unread").value(3));
+        long aliceNotification = readJson(mvc.perform(getAs(alice, "/api/v1/notifications")).andReturn().getResponse().getContentAsString())
+                .get(0).get("id").asLong();
+        mvc.perform(postAs(bob, "/api/v1/notifications/{id}/read", Map.of(), aliceNotification)).andExpect(status().isNotFound());
+    }
 }

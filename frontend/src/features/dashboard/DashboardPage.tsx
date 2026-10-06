@@ -11,6 +11,7 @@ import { useFormat } from '@/app/preferences'
 import { useMe } from '@/features/auth/api'
 import { useAccounts } from '@/features/accounts/api'
 import { AccountFormDialog } from '@/features/accounts/AccountFormDialog'
+import { UpcomingWidget } from '@/features/forecast/ForecastPanel'
 import { useDashboard } from '@/features/transactions/api'
 import { TransactionRow } from '@/features/transactions/TransactionList'
 import { useTransactionDialog } from '@/features/transactions/TransactionDialog'
@@ -128,28 +129,31 @@ export function DashboardPage() {
             <BudgetWidget />
             <GoalsWidget />
           </div>
-          <Card>
-            <CardHeader className="flex-row items-center justify-between">
-              <CardTitle>آخرین تراکنش‌ها</CardTitle>
-              <Button asChild variant="ghost" size="sm">
-                <Link to="/transactions">همه<ChevronLeft /></Link>
-              </Button>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {data.recentTransactions.length === 0 ? (
-                <EmptyState
-                  icon={ReceiptText}
-                  title="هنوز تراکنشی ثبت نکرده‌اید"
-                  action={<Button onClick={() => openTransaction()}><Plus />ثبت اولین تراکنش</Button>}
-                  className="border-none"
-                />
-              ) : (
-                <div className="-mx-2 divide-y">
-                  {data.recentTransactions.map((t) => <TransactionRow key={t.id} t={t} showDate />)}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <UpcomingWidget />
+            <Card className="min-w-0">
+              <CardHeader className="flex-row items-center justify-between">
+                <CardTitle>آخرین تراکنش‌ها</CardTitle>
+                <Button asChild variant="ghost" size="sm">
+                  <Link to="/transactions">همه<ChevronLeft /></Link>
+                </Button>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {data.recentTransactions.length === 0 ? (
+                  <EmptyState
+                    icon={ReceiptText}
+                    title="هنوز تراکنشی ثبت نکرده‌اید"
+                    action={<Button onClick={() => openTransaction()}><Plus />ثبت اولین تراکنش</Button>}
+                    className="border-none"
+                  />
+                ) : (
+                  <div className="-mx-2 divide-y">
+                    {data.recentTransactions.map((t) => <TransactionRow key={t.id} t={t} showDate />)}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       ) : null}
       <AccountFormDialog open={accountDialog} onOpenChange={setAccountDialog} />

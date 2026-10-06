@@ -63,6 +63,9 @@ springdoc:
 
 karname:
   timezone: ${KARNAME_TIMEZONE:Asia/Tehran}
+  scheduling:
+    # Background jobs: recurring postings, notifications and automatic prices.
+    enabled: ${KARNAME_SCHEDULING_ENABLED:true}
   security:
     # Base64-encoded 32-byte key for AES-GCM encryption of stored API keys.
     # Required in production; generate with: openssl rand -base64 32

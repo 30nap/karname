@@ -1,4 +1,4 @@
-import { ArrowLeftRight, ChartPie, Coins, Flag, LayoutDashboard, PiggyBank, Settings, Tags, WalletCards, type LucideIcon } from 'lucide-react'
+import { ArrowLeftRight, ChartPie, Coins, FileText, Flag, Landmark, LayoutDashboard, PiggyBank, Repeat, Settings, Tags, WalletCards, type LucideIcon } from 'lucide-react'
 
 export interface NavItem {
   to: string
@@ -28,6 +28,14 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/budgets', label: 'بودجه', icon: PiggyBank },
       { to: '/reports', label: 'گزارش‌ها', icon: ChartPie },
       { to: '/goals', label: 'اهداف', icon: Flag },
+    ],
+  },
+  {
+    title: 'تعهدات',
+    items: [
+      { to: '/loans', label: 'وام‌ها', icon: Landmark },
+      { to: '/recurring', label: 'تراکنش‌های تکراری', icon: Repeat },
+      { to: '/cheques', label: 'چک‌ها', icon: FileText },
     ],
   },
   {

@@ -117,3 +117,41 @@ export const BANKS: { code: string; name: string }[] = [
 ]
 
 export const BANK_NAMES: Record<string, string> = Object.fromEntries(BANKS.map((b) => [b.code, b.name]))
+
+export const INSTALLMENT_STATUS_LABELS: Record<import('./api/types').InstallmentStatus, string> = {
+  PAID_BEFORE: 'پرداخت‌شده (قبل از ثبت)',
+  PAID: 'پرداخت‌شده',
+  OVERDUE: 'معوق',
+  DUE_SOON: 'نزدیک سررسید',
+  UPCOMING: 'آینده',
+}
+
+export const LOAN_METHOD_LABELS: Record<import('./api/types').LoanMethod, string> = {
+  ANNUITY: 'اقساط مساوی',
+  EQUAL_PRINCIPAL: 'اقساط کاهنده',
+}
+
+export const CHEQUE_STATUS_LABELS: Record<import('./api/types').ChequeStatus, string> = {
+  PENDING: 'در انتظار',
+  CLEARED: 'پاس‌شده',
+  BOUNCED: 'برگشتی',
+  CANCELLED: 'باطل‌شده',
+}
+
+export const CHEQUE_DIRECTION_LABELS: Record<import('./api/types').ChequeDirection, string> = {
+  ISSUED: 'صادره',
+  RECEIVED: 'دریافتی',
+}
+
+export const FREQUENCY_LABELS: Record<import('./api/types').Frequency, string> = {
+  WEEKLY: 'هفتگی',
+  MONTHLY: 'ماهانه',
+  YEARLY: 'سالانه',
+}
+
+export const FORECAST_SOURCE_LABELS: Record<import('./api/types').ForecastSource, string> = {
+  RECORDED: 'ثبت‌شده',
+  RECURRING: 'تکراری',
+  LOAN: 'قسط وام',
+  CHEQUE: 'چک',
+}

@@ -3,6 +3,8 @@ spring:
     banner-mode: off
 
 karname:
+  scheduling:
+    enabled: false
   security:
     # Fixed key for tests only.
     secret-key: 1SYZTDQWMCfNQn8hxDBaoITCTdTH2jlG6ZUKyZIuAMY=

@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useLogout, useMe } from '@/features/auth/api'
+import { NotificationBell } from '@/features/notifications/NotificationBell'
 import { TransactionDialogProvider, useTransactionDialog } from '@/features/transactions/TransactionDialog'
 import { cn } from '@/lib/cn'
 import { ALL_NAV_ITEMS, NAV_GROUPS, type NavItem } from './nav'
@@ -157,8 +158,9 @@ export function AppShell() {
     <TransactionDialogProvider>
       <div className="min-h-dvh">
         <aside className="fixed inset-y-0 start-0 z-30 hidden w-64 flex-col border-e bg-card lg:flex">
-          <div className="flex h-16 items-center px-5">
+          <div className="flex h-16 items-center justify-between ps-5 pe-3">
             <Logo />
+            <NotificationBell align="start" />
           </div>
           <div className="px-3 pb-2">
             <QuickAddButton />
@@ -174,7 +176,10 @@ export function AppShell() {
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-card/95 px-4 backdrop-blur lg:hidden">
           <Logo compact />
           <span className="text-sm font-semibold">{current?.label}</span>
-          <UserMenu compact />
+          <div className="flex items-center">
+            <NotificationBell align="end" />
+            <UserMenu compact />
+          </div>
         </header>
 
         <main className="lg:ps-64">

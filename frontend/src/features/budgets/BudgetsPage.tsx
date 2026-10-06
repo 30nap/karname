@@ -41,7 +41,7 @@ function StatusLabel({ item }: { item: BudgetItem }) {
     return (
       <span className="flex items-center gap-1 text-xs font-medium text-warning">
         <AlertTriangle className="size-3.5" aria-hidden />
-        نزدیک سقف · <Amount value={item.remaining} /> مانده
+        نزدیک سقف | <Amount value={item.remaining} /> مانده
       </span>
     )
   }
@@ -71,7 +71,7 @@ function BudgetRow({ item, month, onEdit, onRemove }: {
           </p>
           <p className="text-xs text-muted-foreground">
             <Amount value={item.spent} /> از <Amount value={item.amount} />
-            <span className="tabular"> · {f.percent(ratio)}</span>
+            <span className="tabular"> | {f.percent(ratio)}</span>
           </p>
         </div>
         <DropdownMenu>
@@ -266,7 +266,7 @@ function SuggestionsDialog({ month, open, onClose }: { month: string; open: bool
                       <span className="block truncate text-sm font-medium">{s.name}</span>
                       <span className="block text-xs text-muted-foreground">
                         میانگین: {f.money(s.averageToman, IRT)}
-                        {s.currentBudget ? ` · بودجه‌ی فعلی: ${f.money(s.currentBudget, IRT)}` : ''}
+                        {s.currentBudget ? ` | بودجه‌ی فعلی: ${f.money(s.currentBudget, IRT)}` : ''}
                       </span>
                     </span>
                     <Amount value={s.suggestedToman} className="text-sm font-semibold" />

@@ -369,3 +369,179 @@ export interface GoalInput {
   notes?: string | null
   archived?: boolean
 }
+
+export type LoanMethod = 'ANNUITY' | 'EQUAL_PRINCIPAL'
+export type InstallmentStatus = 'PAID_BEFORE' | 'PAID' | 'OVERDUE' | 'DUE_SOON' | 'UPCOMING'
+
+export interface Installment {
+  number: number
+  dueDate: string
+  amount: string
+  principal: string
+  interest: string
+  balanceAfter: string
+  status: InstallmentStatus
+  paidOn: string | null
+  paidAmount: string | null
+}
+
+export interface Loan {
+  id: number
+  accountId: number
+  name: string
+  bank: string | null
+  counterparty: string | null
+  principal: string
+  annualRate: string
+  termMonths: number
+  firstDueDate: string
+  method: LoanMethod
+  installmentAmount: string | null
+  paidBefore: number
+  paymentAccountId: number | null
+  notes: string | null
+  outstanding: string
+  totalInterest: string
+  remainingInterest: string
+  paidCount: number
+  overdueCount: number
+  overdueAmount: string
+  next: Installment | null
+  endDate: string | null
+  installments: Installment[] | null
+}
+
+export interface LoanInput {
+  name: string
+  bank?: string | null
+  counterparty?: string | null
+  principal: string
+  annualRate: string
+  termMonths: number
+  firstDueDate: string
+  method: LoanMethod
+  installmentAmount?: string | null
+  paymentAccountId?: number | null
+  notes?: string | null
+  start?: 'NEW' | 'EXISTING'
+  depositAccountId?: number | null
+  receivedOn?: string | null
+  paidBefore?: number | null
+}
+
+export interface LoanPreview {
+  firstInstallment: string
+  lastInstallment: string
+  totalInterest: string
+  totalPaid: string
+  endDate: string
+}
+
+export type Frequency = 'WEEKLY' | 'MONTHLY' | 'YEARLY'
+export type RecurringMode = 'AUTO' | 'REMIND'
+export type OccurrenceStatus = 'POSTED' | 'SKIPPED' | 'DUE' | 'UPCOMING'
+
+export interface RecurringRule {
+  id: number
+  name: string
+  type: 'INCOME' | 'EXPENSE' | 'TRANSFER'
+  accountId: number
+  toAccountId: number | null
+  amount: string
+  toAmount: string | null
+  categoryId: number | null
+  description: string | null
+  frequency: Frequency
+  interval: number
+  dayOfMonth: number | null
+  dayOfWeek: number | null
+  monthOfYear: number | null
+  startDate: string
+  endDate: string | null
+  mode: RecurringMode
+  active: boolean
+  nextDate: string | null
+  lastPosted: string | null
+  dueCount: number
+}
+
+export type RecurringInput = Omit<RecurringRule, 'id' | 'nextDate' | 'lastPosted' | 'dueCount'>
+
+export interface Occurrence {
+  ruleId: number
+  name: string
+  type: 'INCOME' | 'EXPENSE' | 'TRANSFER'
+  mode: RecurringMode
+  date: string
+  amount: string
+  toAmount: string | null
+  accountId: number
+  toAccountId: number | null
+  categoryId: number | null
+  status: OccurrenceStatus
+  transactionId: number | null
+}
+
+export type ChequeDirection = 'ISSUED' | 'RECEIVED'
+export type ChequeStatus = 'PENDING' | 'CLEARED' | 'BOUNCED' | 'CANCELLED'
+
+export interface Cheque {
+  id: number
+  direction: ChequeDirection
+  status: ChequeStatus
+  sayadId: string | null
+  serial: string | null
+  bank: string | null
+  accountId: number | null
+  counterAccountId: number | null
+  categoryId: number | null
+  counterparty: string | null
+  amount: string
+  issueDate: string | null
+  dueDate: string
+  settledOn: string | null
+  description: string | null
+  notes: string | null
+  transactionId: number | null
+  overdue: boolean
+  daysToDue: number
+}
+
+export type ChequeInput = Omit<Cheque, 'id' | 'status' | 'settledOn' | 'transactionId' | 'overdue' | 'daysToDue'>
+
+export type ForecastSource = 'RECORDED' | 'RECURRING' | 'LOAN' | 'CHEQUE'
+
+export interface ForecastEvent {
+  date: string
+  source: ForecastSource
+  title: string
+  amount: string
+  overdue: boolean
+  link: string
+}
+
+export interface Forecast {
+  from: string
+  to: string
+  startBalance: string
+  endBalance: string
+  minBalance: string
+  minDate: string
+  inflow: string
+  outflow: string
+  events: ForecastEvent[]
+  points: { date: string; balance: string }[]
+}
+
+export type NotificationSeverity = 'INFO' | 'WARNING' | 'CRITICAL'
+
+export interface AppNotification {
+  id: number
+  type: string
+  severity: NotificationSeverity
+  title: string
+  body: string | null
+  link: string | null
+  createdAt: string
+  read: boolean
+}

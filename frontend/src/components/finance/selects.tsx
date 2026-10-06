@@ -3,10 +3,13 @@ import { useAccounts } from '@/features/accounts/api'
 import { useCategoryTree } from '@/features/categories/api'
 import { useCommodities } from '@/features/commodities/api'
 import { ACCOUNT_GROUPS, COMMODITY_KIND_LABELS } from '@/lib/labels'
-import type { CategoryKind, CommodityKind } from '@/lib/api/types'
+import type { Account, CategoryKind, CommodityKind } from '@/lib/api/types'
 import { AccountIcon, CategoryIcon } from './icons'
 
 const NONE = '__none__'
+
+// Radix reports '' from its hidden native <select> (form autofill/reset paths); '' is never a real choice here,
+// and Number('') would otherwise turn it into account 0.
 
 interface BaseProps {
   id?: string
@@ -16,16 +19,18 @@ interface BaseProps {
   'aria-describedby'?: string
 }
 
-export function AccountSelect({ value, onChange, exclude, allowNone, ...props }: BaseProps & {
+export function AccountSelect({ value, onChange, exclude, allowNone, filter, ...props }: BaseProps & {
   value: number | null
   onChange: (id: number | null) => void
   exclude?: number | null
   allowNone?: boolean
+  /** Limits the choice, e.g. to Toman accounts that money can be paid from. */
+  filter?: (account: Account) => boolean
 }) {
   const { data: accounts = [] } = useAccounts()
-  const available = accounts.filter((a) => a.id !== exclude)
+  const available = accounts.filter((a) => a.id !== exclude && (!filter || filter(a)))
   return (
-    <Select value={value === null ? (allowNone ? NONE : '') : String(value)} onValueChange={(v) => onChange(v === NONE ? null : Number(v))} disabled={props.disabled}>
+    <Select value={value === null ? (allowNone ? NONE : '') : String(value)} onValueChange={(v) => v && onChange(v === NONE ? null : Number(v))} disabled={props.disabled}>
       <SelectTrigger id={props.id} aria-invalid={props['aria-invalid']} aria-describedby={props['aria-describedby']}>
         <SelectValue placeholder={props.placeholder ?? 'انتخاب حساب'} />
       </SelectTrigger>
@@ -59,7 +64,7 @@ export function CategorySelect({ value, onChange, kind, allowNone = true, noneLa
 }) {
   const tree = useCategoryTree(kind)
   return (
-    <Select value={value === null ? NONE : String(value)} onValueChange={(v) => onChange(v === NONE ? null : Number(v))} disabled={props.disabled}>
+    <Select value={value === null ? NONE : String(value)} onValueChange={(v) => v && onChange(v === NONE ? null : Number(v))} disabled={props.disabled}>
       <SelectTrigger id={props.id} aria-invalid={props['aria-invalid']} aria-describedby={props['aria-describedby']}>
         <SelectValue placeholder={props.placeholder ?? 'انتخاب دسته‌بندی'} />
       </SelectTrigger>
@@ -92,7 +97,7 @@ const KIND_ORDER: CommodityKind[] = ['TOMAN', 'FIAT', 'GOLD', 'COIN', 'CRYPTO', 
 export function CommoditySelect({ value, onChange, ...props }: BaseProps & { value: string; onChange: (code: string) => void }) {
   const { data: commodities = [] } = useCommodities()
   return (
-    <Select value={value} onValueChange={onChange} disabled={props.disabled}>
+    <Select value={value} onValueChange={(code) => code && onChange(code)} disabled={props.disabled}>
       <SelectTrigger id={props.id} aria-invalid={props['aria-invalid']} aria-describedby={props['aria-describedby']}>
         <SelectValue placeholder={props.placeholder ?? 'انتخاب واحد'} />
       </SelectTrigger>

@@ -181,7 +181,7 @@ function CommodityRow({ commodity: c, holding, onSelect }: { commodity: Commodit
           </span>
         ) : null}
         <span className="block text-xs text-muted-foreground">
-          {c.latestPrice ? `هر ${c.unitFa} · ${f.dateTime(c.latestPrice.pricedAt)}` : `هر ${c.unitFa}`}
+          {c.latestPrice ? `هر ${c.unitFa} | ${f.dateTime(c.latestPrice.pricedAt)}` : `هر ${c.unitFa}`}
         </span>
       </span>
       <span className="flex shrink-0 items-center gap-2">

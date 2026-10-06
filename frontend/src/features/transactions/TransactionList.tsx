@@ -25,7 +25,7 @@ function subtitle(t: Transaction) {
     if (!t.category && (t.type === 'EXPENSE' || t.type === 'INCOME')) parts.push('بدون دسته‌بندی')
     parts.push(t.account.name)
   }
-  return parts.join(' · ')
+  return parts.join(' | ')
 }
 
 /** A transfer's amounts; seen from one of its accounts it reads as money in (+) or out (−). */
@@ -82,7 +82,7 @@ export function TransactionRow({ t, showDate, perspective }: { t: Transaction; s
           {t.source !== 'MANUAL' && t.source !== 'SYSTEM' ? <Badge variant="outline" className="shrink-0">{SOURCE_LABELS[t.source]}</Badge> : null}
         </span>
         <span className="block truncate text-xs text-muted-foreground">
-          {showDate ? `${f.dateShort(t.date)} · ` : ''}{subtitle(t)}
+          {showDate ? `${f.dateShort(t.date)} | ` : ''}{subtitle(t)}
         </span>
       </span>
       <span className="flex shrink-0 flex-col items-end">

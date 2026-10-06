@@ -131,3 +131,12 @@ export function addDaysIso(iso: string, days: number): string {
   d.setDate(d.getDate() + days)
   return dateToIso(d)
 }
+
+/** Whole days from {@code from} to {@code to} (negative when {@code to} is earlier). */
+export function daysBetween(from: string, to: string): number {
+  const utc = (iso: string) => {
+    const [y, m, d] = iso.slice(0, 10).split('-').map(Number)
+    return Date.UTC(y, m - 1, d)
+  }
+  return Math.round((utc(to) - utc(from)) / 86_400_000)
+}

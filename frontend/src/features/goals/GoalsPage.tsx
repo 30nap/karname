@@ -124,9 +124,9 @@ function GoalCard({ goal, onEdit, onDelete }: { goal: Goal; onEdit: () => void; 
               <span>
                 روند ۶ ماه اخیر: ماهی <Amount value={goal.monthlyChange} commodity={goal.commodity} sign={Number(goal.monthlyChange) >= 0 ? '+' : undefined} />
                 {goal.etaMonth && goal.monthsToGoal !== null ? (
-                  <span className="text-muted-foreground"> · با این روند: {f.month(goal.etaMonth)} ({formatMonths(goal.monthsToGoal, f.prefs.digits)} دیگر)</span>
+                  <span className="text-muted-foreground"> | با این روند: {f.month(goal.etaMonth)} ({formatMonths(goal.monthsToGoal, f.prefs.digits)} دیگر)</span>
                 ) : Number(goal.monthlyChange) <= 0 ? (
-                  <span className="text-muted-foreground"> · با این روند به هدف نمی‌رسید</span>
+                  <span className="text-muted-foreground"> | با این روند به هدف نمی‌رسید</span>
                 ) : null}
               </span>
             </li>
@@ -281,7 +281,7 @@ export function GoalsPage() {
     <>
       <PageHeader
         title="اهداف"
-        description={goals?.length ? `${f.number(goals.length)} هدف · پیش‌بینی‌ها بر اساس روند ۶ ماه اخیر تا ${f.month(thisMonth)}` : 'برای پس‌انداز هدف بگذارید و پیشرفتش را دنبال کنید.'}
+        description={goals?.length ? `${f.number(goals.length)} هدف | پیش‌بینی‌ها بر اساس روند ۶ ماه اخیر تا ${f.month(thisMonth)}` : 'برای پس‌انداز هدف بگذارید و پیشرفتش را دنبال کنید.'}
         actions={<Button onClick={() => setEditing({})}><Plus />هدف جدید</Button>}
       />
       <label className="mb-4 flex w-fit items-center gap-2 text-sm">
