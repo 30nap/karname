@@ -48,6 +48,21 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  build: {
+    rolldownOptions: {
+      output: {
+        // Long-lived vendor chunks: app deploys don't invalidate the cached libraries.
+        codeSplitting: {
+          groups: [
+            // Higher priority captures first, so shared helpers (clsx…) stay out of the lazily loaded chart chunk.
+            { name: 'vendor-react', test: /[\\/]node_modules[\\/](react|react-dom|scheduler|react-router)[\\/]/, priority: 3 },
+            { name: 'vendor-ui', test: /[\\/]node_modules[\\/](radix-ui|@radix-ui|@floating-ui|@tanstack|sonner|lucide-react|clsx|tailwind-merge|class-variance-authority)[\\/]/, priority: 2 },
+            { name: 'vendor-charts', test: /[\\/]node_modules[\\/](recharts|d3-[a-z-]+|victory-vendor|@reduxjs|react-redux|redux|reselect|immer|decimal\.js-light|es-toolkit)[\\/]/, priority: 1 },
+          ],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: apiProxy,

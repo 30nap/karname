@@ -34,6 +34,7 @@ class PersianTextTest {
     @Test
     void buildsSearchForm() {
         assertThat(PersianText.normalizeForSearch("  می‌خواهم   SNAPP ")).isEqualTo("می خواهم snapp");
+        assertThat(PersianText.normalizeForSearch("قسط ۳ وام")).isEqualTo("قسط 3 وام");
         assertThat(PersianText.normalizeForSearch(null)).isEmpty();
     }
 
@@ -41,5 +42,11 @@ class PersianTextTest {
     void cleansBlankToNull() {
         assertThat(PersianText.clean("   ")).isNull();
         assertThat(PersianText.clean("  خرید   نان ")).isEqualTo("خرید نان");
+    }
+
+    @Test
+    void keepsDigitsAsTypedInDisplayText() {
+        assertThat(PersianText.clean("طلای ۱۸ عیار")).isEqualTo("طلای ۱۸ عیار");
+        assertThat(PersianText.normalize("حقوق مهر 1405")).isEqualTo("حقوق مهر 1405");
     }
 }

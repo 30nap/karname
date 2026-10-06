@@ -28,6 +28,14 @@
   --color-expense: var(--expense);
   --color-warning: var(--warning);
   --color-transfer: var(--transfer);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
+  --color-chart-8: var(--chart-8);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -60,6 +68,16 @@
   --expense: oklch(0.57 0.19 25);
   --warning: oklch(0.7 0.15 70);
   --transfer: oklch(0.52 0.12 255);
+  /* Categorical chart slots, in fixed order (validated for CVD separation on the card surface). */
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-4: #eda100;
+  --chart-5: #e87ba4;
+  --chart-6: #008300;
+  --chart-7: #4a3aa7;
+  --chart-8: #e34948;
+  --chart-grid: oklch(0.92 0.006 165);
   color-scheme: light;
 }
 
@@ -87,6 +105,15 @@
   --expense: oklch(0.7 0.17 25);
   --warning: oklch(0.8 0.14 75);
   --transfer: oklch(0.72 0.11 255);
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #c98500;
+  --chart-5: #d55181;
+  --chart-6: #008300;
+  --chart-7: #9085e9;
+  --chart-8: #e66767;
+  --chart-grid: oklch(0.28 0.012 175);
   color-scheme: dark;
 }
 

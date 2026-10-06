@@ -30,13 +30,21 @@ export function formatNumber(value: string | number, options: NumberFormatOption
     minimumFractionDigits: options.minFraction ?? 0,
     signDisplay: options.signDisplay ?? 'auto',
   })
-  return nf.format(value as Intl.StringNumericLiteral)
+  return isolateSign(nf.format(value as Intl.StringNumericLiteral))
+}
+
+/**
+ * The Persian locale already prefixes signs with LRM so they stay on the left of the digits in
+ * right-to-left text; English output needs the same mark.
+ */
+function isolateSign(text: string): string {
+  return text.startsWith('-') || text.startsWith('+') ? `\u200e${text}` : text
 }
 
 /** Short form for charts and tiles: «۲٫۵ میلیون», «۱۲۰ هزار». */
 export function formatCompact(value: string | number, digits: DigitStyle = 'PERSIAN'): string {
   const nf = formatter(digits, { notation: 'compact', maximumFractionDigits: 1 })
-  return nf.format(Number(value))
+  return isolateSign(nf.format(Number(value)))
 }
 
 export function formatPercent(value: number, digits: DigitStyle = 'PERSIAN', maxFraction = 0): string {

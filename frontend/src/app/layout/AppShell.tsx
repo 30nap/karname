@@ -1,4 +1,4 @@
-import { LogOut, Menu, Settings, UserRound } from 'lucide-react'
+import { LogOut, Menu, Plus, Settings, UserRound } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useLogout, useMe } from '@/features/auth/api'
+import { TransactionDialogProvider, useTransactionDialog } from '@/features/transactions/TransactionDialog'
 import { cn } from '@/lib/cn'
 import { ALL_NAV_ITEMS, NAV_GROUPS, type NavItem } from './nav'
 import { Logo } from './Logo'
@@ -95,24 +96,40 @@ function UserMenu({ compact }: { compact?: boolean }) {
   )
 }
 
+function BottomLink({ item }: { item: NavItem }) {
+  return (
+    <NavLink
+      to={item.to}
+      end={item.to === '/'}
+      className={({ isActive }) =>
+        cn('flex flex-1 flex-col items-center justify-center gap-1 text-[11px] font-medium', isActive ? 'text-primary' : 'text-muted-foreground')
+      }
+    >
+      <item.icon className="size-5" />
+      {item.label}
+    </NavLink>
+  )
+}
+
 function MobileBottomBar({ onMore }: { onMore: () => void }) {
   const primary = useVisibleItems(ALL_NAV_ITEMS.filter((i) => i.primary))
+  const openTransaction = useTransactionDialog()
+  const half = Math.ceil(primary.length / 2)
   return (
     <nav aria-label="منوی پایین" className="fixed inset-x-0 bottom-0 z-40 border-t bg-card/95 backdrop-blur safe-bottom lg:hidden">
       <div className="mx-auto flex h-16 max-w-xl items-stretch justify-around">
-        {primary.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === '/'}
-            className={({ isActive }) =>
-              cn('flex flex-1 flex-col items-center justify-center gap-1 text-[11px] font-medium', isActive ? 'text-primary' : 'text-muted-foreground')
-            }
+        {primary.slice(0, half).map((item) => <BottomLink key={item.to} item={item} />)}
+        <div className="flex flex-1 items-start justify-center">
+          <button
+            type="button"
+            onClick={() => openTransaction()}
+            aria-label="ثبت تراکنش"
+            className="-mt-4 flex size-14 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg ring-4 ring-background transition-transform active:scale-95"
           >
-            <item.icon className="size-5" />
-            {item.label}
-          </NavLink>
-        ))}
+            <Plus className="size-6" />
+          </button>
+        </div>
+        {primary.slice(half).map((item) => <BottomLink key={item.to} item={item} />)}
         <button type="button" onClick={onMore} className="flex flex-1 cursor-pointer flex-col items-center justify-center gap-1 text-[11px] font-medium text-muted-foreground">
           <Menu className="size-5" />
           بیشتر
@@ -122,49 +139,63 @@ function MobileBottomBar({ onMore }: { onMore: () => void }) {
   )
 }
 
+function QuickAddButton() {
+  const openTransaction = useTransactionDialog()
+  return (
+    <Button className="w-full" onClick={() => openTransaction()}>
+      <Plus />ثبت تراکنش
+    </Button>
+  )
+}
+
 export function AppShell() {
   const [moreOpen, setMoreOpen] = useState(false)
   const location = useLocation()
   const current = ALL_NAV_ITEMS.find((i) => (i.to === '/' ? location.pathname === '/' : location.pathname.startsWith(i.to)))
 
   return (
-    <div className="min-h-dvh">
-      <aside className="fixed inset-y-0 start-0 z-30 hidden w-64 flex-col border-e bg-card lg:flex">
-        <div className="flex h-16 items-center px-5">
-          <Logo />
-        </div>
-        <div className="flex-1 overflow-y-auto px-3 py-2">
-          <NavList />
-        </div>
-        <div className="border-t p-3">
-          <UserMenu />
-        </div>
-      </aside>
+    <TransactionDialogProvider>
+      <div className="min-h-dvh">
+        <aside className="fixed inset-y-0 start-0 z-30 hidden w-64 flex-col border-e bg-card lg:flex">
+          <div className="flex h-16 items-center px-5">
+            <Logo />
+          </div>
+          <div className="px-3 pb-2">
+            <QuickAddButton />
+          </div>
+          <div className="flex-1 overflow-y-auto px-3 py-2">
+            <NavList />
+          </div>
+          <div className="border-t p-3">
+            <UserMenu />
+          </div>
+        </aside>
 
-      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-card/95 px-4 backdrop-blur lg:hidden">
-        <Logo compact />
-        <span className="text-sm font-semibold">{current?.label}</span>
-        <UserMenu compact />
-      </header>
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-card/95 px-4 backdrop-blur lg:hidden">
+          <Logo compact />
+          <span className="text-sm font-semibold">{current?.label}</span>
+          <UserMenu compact />
+        </header>
 
-      <main className="lg:ps-64">
-        <div className="mx-auto w-full max-w-6xl px-4 pb-28 pt-5 sm:px-6 lg:pb-10 lg:pt-8">
-          <Outlet />
-        </div>
-      </main>
+        <main className="lg:ps-64">
+          <div className="mx-auto w-full max-w-6xl px-4 pb-28 pt-5 sm:px-6 lg:pb-10 lg:pt-8">
+            <Outlet />
+          </div>
+        </main>
 
-      <MobileBottomBar onMore={() => setMoreOpen(true)} />
+        <MobileBottomBar onMore={() => setMoreOpen(true)} />
 
-      <Dialog open={moreOpen} onOpenChange={setMoreOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>همه‌ی بخش‌ها</DialogTitle>
-          </DialogHeader>
-          <DialogBody>
-            <NavList onNavigate={() => setMoreOpen(false)} />
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
-    </div>
+        <Dialog open={moreOpen} onOpenChange={setMoreOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>همه‌ی بخش‌ها</DialogTitle>
+            </DialogHeader>
+            <DialogBody>
+              <NavList onNavigate={() => setMoreOpen(false)} />
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </TransactionDialogProvider>
   )
 }

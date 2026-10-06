@@ -22,6 +22,11 @@ export const routes: RouteObject[] = [
             element: <AppShell />,
             children: [
               { index: true, lazy: () => import('@/features/dashboard/DashboardPage').then((m) => ({ Component: m.DashboardPage })) },
+              { path: 'transactions', lazy: () => import('@/features/transactions/TransactionsPage').then((m) => ({ Component: m.TransactionsPage })) },
+              { path: 'accounts', lazy: () => import('@/features/accounts/AccountsPage').then((m) => ({ Component: m.AccountsPage })) },
+              { path: 'accounts/:id', lazy: () => import('@/features/accounts/AccountDetailPage').then((m) => ({ Component: m.AccountDetailPage })) },
+              { path: 'assets', lazy: () => import('@/features/commodities/AssetsPage').then((m) => ({ Component: m.AssetsPage })) },
+              { path: 'categories', lazy: () => import('@/features/categories/CategoriesPage').then((m) => ({ Component: m.CategoriesPage })) },
               { path: 'settings', lazy: () => import('@/features/settings/SettingsPage').then((m) => ({ Component: m.SettingsPage })) },
               { path: '*', Component: NotFoundPage },
             ],

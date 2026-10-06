@@ -37,8 +37,8 @@ public final class PersianText {
 
     /**
      * Unifies Arabic letter variants with their Persian forms (Arabic Yeh/Alef Maksura to Persian
-     * Yeh, Arabic Kaf to Keheh, Teh Marbuta to Heh), removes tatweel and Arabic diacritics, and
-     * normalizes digits to ASCII.
+     * Yeh, Arabic Kaf to Keheh, Teh Marbuta to Heh) and removes tatweel and Arabic diacritics.
+     * Digits are kept as typed: this is text the user will see again.
      */
     public static String normalize(String text) {
         if (text == null) {
@@ -56,7 +56,7 @@ public final class PersianText {
                 }
                 default -> {
                     if (!isArabicDiacritic(c)) {
-                        sb.append(asciiDigit(c));
+                        sb.append(c);
                     }
                 }
             }
@@ -65,14 +65,14 @@ public final class PersianText {
     }
 
     /**
-     * Normal form used for searching: {@link #normalize}, ZWNJ treated as a space, whitespace
-     * collapsed and Latin text lower-cased.
+     * Normal form used for searching and matching: {@link #normalize}, ASCII digits, ZWNJ treated as
+     * a space, whitespace collapsed and Latin text lower-cased.
      */
     public static String normalizeForSearch(String text) {
         if (text == null) {
             return "";
         }
-        String n = normalize(text).replace(ZWNJ, ' ');
+        String n = normalizeDigits(normalize(text)).replace(ZWNJ, ' ');
         return n.replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT);
     }
 

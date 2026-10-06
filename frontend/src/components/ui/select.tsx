@@ -2,14 +2,19 @@ import { Select as SelectPrimitive } from 'radix-ui'
 import { Check, ChevronDown } from 'lucide-react'
 import type { ComponentProps } from 'react'
 import { cn } from '@/lib/cn'
+import { useFieldControl } from './field-context'
 
 export const Select = SelectPrimitive.Root
 export const SelectGroup = SelectPrimitive.Group
 export const SelectValue = SelectPrimitive.Value
 
 export function SelectTrigger({ className, children, ...props }: ComponentProps<typeof SelectPrimitive.Trigger>) {
+  const field = useFieldControl()
   return (
     <SelectPrimitive.Trigger
+      id={field?.id}
+      aria-invalid={field?.['aria-invalid']}
+      aria-describedby={field?.['aria-describedby']}
       className={cn(
         'flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-input bg-card px-3 text-sm shadow-xs',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 data-[placeholder]:text-muted-foreground disabled:opacity-60',

@@ -34,6 +34,12 @@ describe('money formatting', () => {
     expect(sumAmounts(['0.1', '0.2', '100'])).toBe('100.3')
   })
 
+  it('keeps the minus sign on the left of the digits in right-to-left text', () => {
+    expect(formatMoney('-470000', IRT, persianToman)).toBe('\u200e−۴۷۰٬۰۰۰ تومان')
+    expect(formatMoney('-470000', IRT, { digits: 'LATIN', displayUnit: 'TOMAN' })).toBe('\u200e-470,000 تومان')
+    expect(formatMoney('45', IRT, persianToman, { signDisplay: 'always' })).toBe('\u200e+۴۵ تومان')
+  })
+
   it('handles missing amounts', () => {
     expect(formatMoney(null, IRT, persianToman)).toBe('—')
   })

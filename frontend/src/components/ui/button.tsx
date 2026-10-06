@@ -20,8 +20,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         aria-busy={loading || undefined}
         {...props}
       >
-        {loading && !asChild ? <span className="size-4 animate-spin rounded-full border-2 border-current border-e-transparent" aria-hidden /> : null}
-        {children}
+        {asChild ? children : (
+          <>
+            {loading ? <span className="size-4 animate-spin rounded-full border-2 border-current border-e-transparent" aria-hidden /> : null}
+            {children}
+          </>
+        )}
       </Comp>
     )
   },
