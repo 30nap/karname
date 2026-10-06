@@ -25,10 +25,10 @@ interface Row {
 }
 
 /** Net worth at the end of each Jalali month, measured in Toman or in an alternative unit (USD, gold…). */
-export function NetWorthTrend() {
+export function NetWorthTrend({ months = 12, chartHeight = 'h-56' }: { months?: number; chartHeight?: string }) {
   const f = useFormat()
   const commodities = useCommodityMap()
-  const { data, isPending } = useNetWorthHistory(12)
+  const { data, isPending } = useNetWorthHistory(months)
   const [measure, setMeasure] = useState('IRT')
   const [view, setView] = useState<ChartView>('chart')
 
@@ -71,13 +71,13 @@ export function NetWorthTrend() {
       </CardHeader>
       <CardContent>
         {isPending ? (
-          <Skeleton className="h-56" />
+          <Skeleton className={chartHeight} />
         ) : !hasData ? (
           <p className="flex h-40 items-center justify-center text-center text-sm text-muted-foreground">
-            با ثبت حساب‌ها و تراکنش‌ها، روند دارایی خالص شما در ۱۲ ماه گذشته این‌جا نمایش داده می‌شود.
+            با ثبت حساب‌ها و تراکنش‌ها، روند دارایی خالص شما در {f.number(months)} ماه گذشته این‌جا نمایش داده می‌شود.
           </p>
         ) : view === 'chart' ? (
-          <div dir="ltr" className="h-56 w-full" role="img" aria-label={`نمودار روند دارایی خالص به ${commodity.unitFa}`}>
+          <div dir="ltr" className={`${chartHeight} w-full`} role="img" aria-label={`نمودار روند دارایی خالص به ${commodity.unitFa}`}>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={rows} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
                 <defs>

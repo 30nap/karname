@@ -19,6 +19,7 @@ import { formatJalaliWithWeekday, todayIso } from '@/lib/jalali'
 import { cn } from '@/lib/cn'
 import { NetWorthCard } from './NetWorthCard'
 import { NetWorthTrend } from './NetWorthTrend'
+import { BudgetWidget, GoalsWidget, TopCategoriesWidget } from './PlanningWidgets'
 
 function StatTile({ label, icon: Icon, iconClass, value, footer }: {
   label: string
@@ -122,6 +123,11 @@ export function DashboardPage() {
             <div className="min-w-0 xl:col-span-2"><NetWorthTrend /></div>
           </div>
           <MonthTiles current={data.currentMonth} previous={data.previousMonth} />
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            <TopCategoriesWidget />
+            <BudgetWidget />
+            <GoalsWidget />
+          </div>
           <Card>
             <CardHeader className="flex-row items-center justify-between">
               <CardTitle>آخرین تراکنش‌ها</CardTitle>

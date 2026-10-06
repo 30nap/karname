@@ -116,7 +116,8 @@ public class CommodityService {
     @Transactional
     public void deleteCustom(long userId, String code) {
         Commodity commodity = requireOwnCustom(userId, code);
-        long used = jdbc.sql("SELECT count(*) FROM accounts WHERE commodity_id = ?").param(commodity.getId()).query(Long.class).single();
+        long used = jdbc.sql("SELECT (SELECT count(*) FROM accounts WHERE commodity_id = :id) + (SELECT count(*) FROM goals WHERE commodity_id = :id)")
+                .param("id", commodity.getId()).query(Long.class).single();
         if (used > 0) {
             throw ApiException.conflict("commodity.inUse");
         }

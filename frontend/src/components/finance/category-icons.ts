@@ -1,5 +1,5 @@
 import {
-  Baby, BadgePercent, BookOpen, Briefcase, Building, Bus, Car, Coffee, Coins, Droplets, Dumbbell, Ellipsis, Film, Flame, Fuel, Gamepad2, Gift, GraduationCap, HandCoins, HandHeart, HeartPulse, House, Landmark, Laptop, Music, PartyPopper, PawPrint, Percent, Phone, Pill, Plane, Receipt, Scale, Shirt, ShoppingBag, ShoppingCart, Smartphone, Sofa, Sparkles, Stethoscope, Tag, Train, TrendingUp, Utensils, Wallet, Wifi, Wrench, Zap,
+  Baby, BadgePercent, Flag, Target, BookOpen, Briefcase, Building, Bus, Car, Coffee, Coins, Droplets, Dumbbell, Ellipsis, Film, Flame, Fuel, Gamepad2, Gift, GraduationCap, HandCoins, HandHeart, HeartPulse, House, Landmark, Laptop, Music, PartyPopper, PawPrint, Percent, Phone, Pill, Plane, Receipt, Scale, Shirt, ShoppingBag, ShoppingCart, Smartphone, Sofa, Sparkles, Stethoscope, Tag, Train, TrendingUp, Utensils, Wallet, Wifi, Wrench, Zap,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -12,7 +12,7 @@ export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   tag: Tag, 'paw-print': PawPrint, 'shopping-bag': ShoppingBag, 'gamepad-2': Gamepad2, baby: Baby, dumbbell: Dumbbell,
   'book-open': BookOpen, coffee: Coffee, fuel: Fuel, bus: Bus, wrench: Wrench, sofa: Sofa, zap: Zap, droplets: Droplets,
   flame: Flame, phone: Phone, pill: Pill, stethoscope: Stethoscope, film: Film, music: Music, train: Train, coins: Coins,
-  'hand-coins': HandCoins, wallet: Wallet,
+  'hand-coins': HandCoins, wallet: Wallet, flag: Flag, target: Target,
 }
 
 /** Persian names of the category icons, for screen readers and tooltips. */
@@ -25,4 +25,5 @@ export const CATEGORY_ICON_LABELS: Record<string, string> = {
   baby: 'کودک', dumbbell: 'ورزش', 'book-open': 'کتاب', coffee: 'کافه', fuel: 'سوخت', bus: 'حمل‌ونقل عمومی',
   wrench: 'تعمیرات', sofa: 'لوازم خانه', zap: 'برق', droplets: 'آب', flame: 'گاز', phone: 'تلفن', pill: 'دارو',
   stethoscope: 'پزشک', film: 'فیلم', music: 'موسیقی', train: 'قطار', coins: 'سکه', 'hand-coins': 'وام و قرض', wallet: 'کیف پول',
+  flag: 'پرچم', target: 'هدف',
 }

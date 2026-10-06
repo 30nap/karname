@@ -18,6 +18,7 @@ interface JalaliDatePickerProps {
   className?: string
   'aria-invalid'?: boolean
   'aria-describedby'?: string
+  'aria-label'?: string
 }
 
 /** Solar Hijri date picker; the week starts on Saturday. */

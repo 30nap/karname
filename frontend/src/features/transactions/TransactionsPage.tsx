@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Plus, ReceiptText, Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, ReceiptText, Search, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { Button } from '@/components/ui/button'
@@ -28,6 +28,11 @@ export function TransactionsPage() {
   const type = (params.get('type') as TypeFilter | null) ?? 'ALL'
   const accountId = params.get('account') ? Number(params.get('account')) : null
   const categoryId = params.get('category') ? Number(params.get('category')) : null
+  const uncategorized = params.get('uncategorized') === '1'
+  // A custom range (from reports) replaces the month.
+  const rangeFrom = params.get('from')
+  const rangeTo = params.get('to')
+  const customRange = rangeFrom !== null && rangeTo !== null
   const [search, setSearch] = useState(params.get('q') ?? '')
 
   const update = (changes: Record<string, string | null>) => {
@@ -37,16 +42,17 @@ export function TransactionsPage() {
   }
 
   const filter = useMemo<TransactionFilter>(() => {
-    const range = allTime ? null : monthRange(month)
+    const range = customRange ? { start: rangeFrom, end: rangeTo } : allTime ? null : monthRange(month)
     return {
       from: range?.start,
       to: range?.end,
       type: type === 'ALL' ? undefined : [type as TransactionType],
       accountId: accountId ?? undefined,
       categoryId: categoryId ?? undefined,
+      uncategorized: uncategorized || undefined,
       q: params.get('q') ?? undefined,
     }
-  }, [allTime, month, type, accountId, categoryId, params])
+  }, [customRange, rangeFrom, rangeTo, allTime, month, type, accountId, categoryId, uncategorized, params])
 
   const query = useTransactionPages(filter)
   const pages = query.data?.pages ?? []
@@ -63,17 +69,24 @@ export function TransactionsPage() {
       <div className="mb-4 flex flex-col gap-3">
         {/* Mobile: month on its own row, then a two-column grid; desktop: one row. */}
         <div className="grid grid-cols-2 gap-2 lg:flex lg:flex-wrap lg:items-center">
-          <div className="col-span-2 flex items-center justify-between rounded-lg border bg-card lg:justify-start">
-            <Button variant="ghost" size="icon-sm" aria-label="ماه قبل" onClick={() => update({ month: addMonthsToKey(allTime ? currentMonthKey() : month, -1) })}>
-              <ChevronRight />
-            </Button>
-            <button type="button" className="min-w-28 cursor-pointer px-2 text-sm font-medium" onClick={() => update({ month: allTime ? null : 'all' })}>
-              {allTime ? 'همه‌ی زمان‌ها' : f.month(month)}
-            </button>
-            <Button variant="ghost" size="icon-sm" aria-label="ماه بعد" onClick={() => update({ month: addMonthsToKey(allTime ? currentMonthKey() : month, 1) })}>
-              <ChevronLeft />
-            </Button>
-          </div>
+          {customRange ? (
+            <div className="col-span-2 flex h-10 items-center justify-between gap-2 rounded-lg border bg-card ps-3">
+              <span className="text-sm font-medium">{f.date(rangeFrom)} تا {f.date(rangeTo)}</span>
+              <Button variant="ghost" size="icon-sm" aria-label="حذف بازه" onClick={() => update({ from: null, to: null })}><X /></Button>
+            </div>
+          ) : (
+            <div className="col-span-2 flex items-center justify-between rounded-lg border bg-card lg:justify-start">
+              <Button variant="ghost" size="icon-sm" aria-label="ماه قبل" onClick={() => update({ month: addMonthsToKey(allTime ? currentMonthKey() : month, -1) })}>
+                <ChevronRight />
+              </Button>
+              <button type="button" className="min-w-28 cursor-pointer px-2 text-sm font-medium" onClick={() => update({ month: allTime ? null : 'all' })}>
+                {allTime ? 'همه‌ی زمان‌ها' : f.month(month)}
+              </button>
+              <Button variant="ghost" size="icon-sm" aria-label="ماه بعد" onClick={() => update({ month: addMonthsToKey(allTime ? currentMonthKey() : month, 1) })}>
+                <ChevronLeft />
+              </Button>
+            </div>
+          )}
           <div className="min-w-0 lg:w-36">
             <Select value={type} onValueChange={(v) => update({ type: v === 'ALL' ? null : v, category: null })}>
               <SelectTrigger aria-label="نوع تراکنش"><SelectValue /></SelectTrigger>
@@ -88,7 +101,12 @@ export function TransactionsPage() {
           <div className="min-w-0 lg:w-44">
             <AccountSelect value={accountId} allowNone placeholder="همه‌ی حساب‌ها" onChange={(id) => update({ account: id ? String(id) : null })} />
           </div>
-          {type !== 'TRANSFER' ? (
+          {uncategorized ? (
+            <div className="col-span-2 flex h-10 items-center justify-between gap-2 rounded-lg border bg-card ps-3 lg:w-48">
+              <span className="text-sm">بدون دسته‌بندی</span>
+              <Button variant="ghost" size="icon-sm" aria-label="حذف فیلتر بدون دسته‌بندی" onClick={() => update({ uncategorized: null })}><X /></Button>
+            </div>
+          ) : type !== 'TRANSFER' ? (
             <div className="col-span-2 min-w-0 lg:w-48">
               <CategorySelect kind={type === 'INCOME' ? 'INCOME' : 'EXPENSE'} value={categoryId} noneLabel="همه‌ی دسته‌ها"
                 onChange={(id) => update({ category: id ? String(id) : null })} />

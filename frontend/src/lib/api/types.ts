@@ -241,3 +241,131 @@ export interface CostBasis {
   realizedToman: string
   costComplete: boolean
 }
+
+export type BudgetStatus = 'OK' | 'WARNING' | 'OVER'
+
+export interface BudgetItem {
+  categoryId: number
+  name: string
+  icon: string | null
+  parentId: number | null
+  parentName: string | null
+  amount: string
+  spent: string
+  remaining: string
+  ratio: string
+  status: BudgetStatus
+  recurring: boolean
+  since: string
+  projected: string | null
+  unpricedCount: number
+}
+
+export interface BudgetMonth {
+  month: string
+  daysInMonth: number
+  daysElapsed: number
+  current: boolean
+  totalBudget: string
+  totalSpent: string
+  unbudgetedSpent: string
+  totalExpense: string
+  items: BudgetItem[]
+}
+
+export interface BudgetSuggestion {
+  categoryId: number
+  name: string
+  icon: string | null
+  averageToman: string
+  suggestedToman: string
+  currentBudget: string | null
+}
+
+export interface MonthTotals {
+  month: string
+  incomeToman: string
+  expenseToman: string
+  netToman: string
+  savingsRate: string | null
+  unpricedCount: number
+  partial: boolean
+}
+
+export type ReportKind = 'INCOME' | 'EXPENSE'
+
+export interface CategoryLine {
+  categoryId: number | null
+  name: string | null
+  icon: string | null
+  valueToman: string
+  share: string
+  count: number
+  previousToman: string
+  averageToman: string | null
+  children: CategoryLine[]
+}
+
+export interface CategoryReport {
+  fromMonth: string
+  toMonth: string
+  kind: ReportKind
+  totalToman: string
+  previousTotalToman: string
+  unpricedCount: number
+  items: CategoryLine[]
+}
+
+export interface TopItem {
+  transaction: Transaction
+  valueToman: string
+}
+
+export interface Anomaly {
+  categoryId: number
+  name: string
+  icon: string | null
+  currentToman: string
+  averageToman: string
+  ratio: string | null
+  zScore: string | null
+  historyMonths: number
+}
+
+export interface Goal {
+  id: number
+  name: string
+  icon: string | null
+  targetAmount: string
+  commodity: string
+  targetDate: string | null
+  accountIds: number[]
+  manualAmount: string | null
+  notes: string | null
+  archived: boolean
+  currentAmount: string | null
+  currentToman: string | null
+  progress: string | null
+  remaining: string | null
+  achieved: boolean
+  monthlyChange: string | null
+  etaMonth: string | null
+  monthsToGoal: number | null
+  monthsLeft: number | null
+  requiredPerMonth: string | null
+  requiredPerMonthToman: string | null
+  onTrack: boolean | null
+  missingPrices: boolean
+}
+
+export interface GoalInput {
+  name: string
+  icon?: string | null
+  targetAmount: string
+  commodity: string
+  targetDate?: string | null
+  accountIds: number[]
+  manualAmount?: string | null
+  notes?: string | null
+  archived?: boolean
+}
