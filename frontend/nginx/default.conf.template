@@ -1,0 +1,90 @@
+# Karname web server: the single-page app, plus a reverse proxy to the API.
+# The KARNAME_BACKEND and KARNAME_HSTS placeholders are filled in from the environment at start-up.
+
+server_tokens off;
+
+upstream karname_backend {
+    server ${KARNAME_BACKEND};
+    keepalive 16;
+}
+
+# HTTPS terminated by a proxy in front of this one (Caddy, Traefik, a CDN…) is passed on as such.
+map $http_x_forwarded_proto $karname_forwarded_proto {
+    default $http_x_forwarded_proto;
+    ""      $scheme;
+}
+
+map "" $karname_hsts {
+    default "${KARNAME_HSTS}";
+}
+
+# Brute-force brake in front of the application's own limits.
+limit_req_zone $binary_remote_addr zone=karname_auth:10m rate=20r/m;
+
+server {
+    # IPv4 only: Docker networks have no IPv6 unless explicitly enabled, and nginx refuses to start without it
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+
+    # full JSON backups can be restored through the API
+    client_max_body_size 52m;
+
+    gzip on;
+    gzip_comp_level 5;
+    gzip_min_length 1024;
+    gzip_proxied any;
+    gzip_vary on;
+    gzip_types text/plain text/css text/csv application/javascript application/json application/manifest+json image/svg+xml;
+
+    include /etc/nginx/snippets/security-headers.conf;
+
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    # the assistant streams its answers (Server-Sent Events): never buffer or compress them
+    location = /api/v1/ai/chat {
+        include /etc/nginx/snippets/proxy.conf;
+        proxy_buffering off;
+        proxy_cache off;
+        gzip off;
+    }
+
+    # password checks: sign-in, registration, password change and two-factor setup
+    location ~ ^/api/v1/(auth/(login|register)|me/(password|totp/)) {
+        limit_req zone=karname_auth burst=10 nodelay;
+        limit_req_status 429;
+        include /etc/nginx/snippets/proxy.conf;
+    }
+
+    location /api/ {
+        include /etc/nginx/snippets/proxy.conf;
+    }
+
+    location = /actuator/health {
+        include /etc/nginx/snippets/proxy.conf;
+    }
+
+    # content-hashed bundles never change
+    location /assets/ {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    # the app shell and service worker must always be revalidated, or updates never arrive
+    location ~ ^/(index\.html|sw\.js|registerSW\.js|manifest\.webmanifest)$ {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri =404;
+    }
+
+    location / {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri /index.html;
+    }
+}

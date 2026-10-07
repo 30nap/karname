@@ -18,7 +18,7 @@ class SecretCipherTest {
     private static KarnameProperties props(String key, Path file) {
         return new KarnameProperties(ZoneId.of("Asia/Tehran"),
                 new KarnameProperties.Security(key, file.toString(), Duration.ofDays(30), 5, Duration.ofMinutes(15), false),
-                new KarnameProperties.Ai(null, 100, false));
+                new KarnameProperties.Ai(null, 100, false), new KarnameProperties.Demo(false, null));
     }
 
     private static String randomKey() {

@@ -54,6 +54,15 @@ jacoco {
     toolVersion = "0.8.15"
 }
 
+// One self-contained jar with a stable name (the Docker image extracts its layers).
+tasks.bootJar {
+    archiveFileName = "karname.jar"
+}
+
+tasks.jar {
+    enabled = false
+}
+
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
     options.compilerArgs.addAll(listOf("-parameters", "-Xlint:deprecation"))

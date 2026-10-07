@@ -49,11 +49,24 @@ public class UserService {
      */
     @Transactional
     public User register(String rawUsername, String displayName, String password) {
+        return create(rawUsername, displayName, password, true);
+    }
+
+    /**
+     * Creates a user for a start-up task (the demo account) under the same rules, except that it
+     * works while registration is closed.
+     */
+    @Transactional
+    public User provision(String rawUsername, String displayName, String password) {
+        return create(rawUsername, displayName, password, false);
+    }
+
+    private User create(String rawUsername, String displayName, String password, boolean needsOpenRegistration) {
         // Serialize registrations so two simultaneous "first users" cannot both become admin.
         jdbc.sql("SELECT pg_advisory_xact_lock(?)").param(REGISTRATION_LOCK_ID).query((rs, rowNum) -> 1).list();
 
         boolean firstUser = users.count() == 0;
-        if (!firstUser && !systemSettings.isRegistrationOpen()) {
+        if (needsOpenRegistration && !firstUser && !systemSettings.isRegistrationOpen()) {
             throw ApiException.forbidden("auth.registrationClosed");
         }
         String username = normalizeUsername(rawUsername);

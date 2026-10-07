@@ -11,7 +11,8 @@ import java.time.ZoneId;
 public record KarnameProperties(
         @DefaultValue("Asia/Tehran") ZoneId timezone,
         @DefaultValue Security security,
-        @DefaultValue Ai ai) {
+        @DefaultValue Ai ai,
+        @DefaultValue Demo demo) {
 
     public record Security(
             String secretKey,
@@ -32,5 +33,14 @@ public record KarnameProperties(
             String anthropicApiKey,
             @DefaultValue("100") int defaultDailyLimit,
             @DefaultValue("false") boolean fakeEnabled) {
+    }
+
+    /**
+     * @param enabled creates the user "demo" with six months of sample data on start-up (once)
+     * @param password its password; a random one is generated and logged when empty
+     */
+    public record Demo(
+            @DefaultValue("false") boolean enabled,
+            String password) {
     }
 }

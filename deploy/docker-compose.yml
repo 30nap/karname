@@ -1,0 +1,78 @@
+# Karname: PostgreSQL + Spring Boot backend + nginx (app and API on one origin).
+#   cp .env.example .env   # then fill in the secrets
+#   docker compose up -d --build
+# Optional local model server for private AI: docker compose --profile ollama up -d
+name: karname
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: karname
+      POSTGRES_USER: karname
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U karname -d karname"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+
+  backend:
+    build: ../backend
+    image: karname-backend:${KARNAME_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      KARNAME_DB_URL: jdbc:postgresql://db:5432/karname
+      KARNAME_DB_USER: karname
+      KARNAME_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      # encrypts stored API keys: keep it with your backups, it cannot be recovered
+      KARNAME_SECRET_KEY: ${KARNAME_SECRET_KEY:?set KARNAME_SECRET_KEY in .env (openssl rand -base64 32)}
+      KARNAME_COOKIE_SECURE: ${KARNAME_COOKIE_SECURE:-false}
+      KARNAME_TIMEZONE: ${KARNAME_TIMEZONE:-Asia/Tehran}
+      KARNAME_SESSION_TIMEOUT: ${KARNAME_SESSION_TIMEOUT:-12h}
+      KARNAME_AI_DAILY_LIMIT: ${KARNAME_AI_DAILY_LIMIT:-100}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      KARNAME_DEMO: ${KARNAME_DEMO:-false}
+      KARNAME_DEMO_PASSWORD: ${KARNAME_DEMO_PASSWORD:-}
+      KARNAME_AI_FAKE: ${KARNAME_AI_FAKE:-false}
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:-}
+    networks: [internal]
+
+  web:
+    build: ../frontend
+    image: karname-web:${KARNAME_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      KARNAME_BACKEND: backend:8080
+      KARNAME_HSTS: ${KARNAME_HSTS:-}
+    ports:
+      - "${KARNAME_BIND:-127.0.0.1}:${KARNAME_HTTP_PORT:-8080}:80"
+    networks: [internal]
+
+  # Local models (no data leaves the server). In Settings → AI, add an "Ollama" provider with
+  # base URL http://ollama:11434/v1, then pull a model:
+  #   docker compose exec ollama ollama pull qwen2.5:7b
+  ollama:
+    image: ollama/ollama:latest
+    profiles: [ollama]
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    networks: [internal]
+
+volumes:
+  db-data:
+  ollama-data:
+
+networks:
+  internal:

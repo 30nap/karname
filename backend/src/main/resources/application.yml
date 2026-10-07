@@ -60,10 +60,13 @@ management:
       probes:
         enabled: true
 
+# The OpenAPI description and Swagger UI are off unless KARNAME_API_DOCS=true (e.g. in development).
 springdoc:
   api-docs:
+    enabled: ${KARNAME_API_DOCS:false}
     path: /v3/api-docs
   swagger-ui:
+    enabled: ${KARNAME_API_DOCS:false}
     path: /swagger-ui.html
 
 karname:
@@ -79,6 +82,11 @@ karname:
     default-daily-limit: ${KARNAME_AI_DAILY_LIMIT:100}
     # An offline scripted model for demos and end-to-end tests; never enable in production.
     fake-enabled: ${KARNAME_AI_FAKE:false}
+  demo:
+    # Creates the user "demo" with six months of sample data on first start (for trying the app).
+    enabled: ${KARNAME_DEMO:false}
+    # Empty: a random password is generated and written to the log.
+    password: ${KARNAME_DEMO_PASSWORD:}
   security:
     # Base64-encoded 32-byte key for AES-GCM encryption of stored API keys.
     # Required in production; generate with: openssl rand -base64 32
