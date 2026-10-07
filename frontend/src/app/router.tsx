@@ -35,6 +35,9 @@ export const routes: RouteObject[] = [
               { path: 'assets', lazy: () => import('@/features/commodities/AssetsPage').then((m) => ({ Component: m.AssetsPage })) },
               { path: 'categories', lazy: () => import('@/features/categories/CategoriesPage').then((m) => ({ Component: m.CategoriesPage })) },
               { path: 'data', lazy: () => import('@/features/data/DataPage').then((m) => ({ Component: m.DataPage })) },
+              // one route with an optional id, so a new conversation keeps the page (and its stream) when it gets an address
+              { path: 'assistant/:id?', lazy: () => import('@/features/assistant/AssistantPage').then((m) => ({ Component: m.AssistantPage })) },
+              { path: 'sms', lazy: () => import('@/features/ai/SmsImportPage').then((m) => ({ Component: m.SmsImportPage })) },
               { path: 'settings', lazy: () => import('@/features/settings/SettingsPage').then((m) => ({ Component: m.SettingsPage })) },
               { path: '*', Component: NotFoundPage },
             ],

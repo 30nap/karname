@@ -10,6 +10,7 @@ import { MonthNavigator } from '@/components/finance/MonthNavigator'
 import { useFormat } from '@/app/preferences'
 import { NetWorthTrend } from '@/features/dashboard/NetWorthTrend'
 import { ForecastPanel } from '@/features/forecast/ForecastPanel'
+import { AiReportPanel } from '@/features/ai/AiReportPanel'
 import { TransactionRow } from '@/features/transactions/TransactionList'
 import type { ReportKind } from '@/lib/api/types'
 import { addMonthsToKey, currentMonthKey } from '@/lib/jalali'
@@ -17,7 +18,7 @@ import { AnomalyAlerts, CategoryBreakdown } from './CategoryBreakdown'
 import { MonthlyChart } from './MonthlyChart'
 import { useAnomalies, useCategoryReport, useTopReport } from './api'
 
-type Tab = 'trend' | 'categories' | 'top' | 'wealth' | 'forecast'
+type Tab = 'trend' | 'categories' | 'top' | 'wealth' | 'forecast' | 'ai'
 const SPANS = ['1', '3', '6', '12'] as const
 type Span = (typeof SPANS)[number]
 
@@ -87,6 +88,7 @@ export function ReportsPage() {
           <TabsTrigger value="top">بزرگ‌ترین‌ها</TabsTrigger>
           <TabsTrigger value="wealth">ثروت</TabsTrigger>
           <TabsTrigger value="forecast">پیش‌بینی نقدینگی</TabsTrigger>
+          <TabsTrigger value="ai">گزارش هوشمند</TabsTrigger>
         </TabsList>
 
         <TabsContent value="trend">
@@ -149,6 +151,10 @@ export function ReportsPage() {
 
         <TabsContent value="forecast">
           <ForecastPanel />
+        </TabsContent>
+
+        <TabsContent value="ai">
+          <AiReportPanel month={month} onMonth={(m) => update({ month: m })} />
         </TabsContent>
       </Tabs>
     </>

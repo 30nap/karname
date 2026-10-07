@@ -100,6 +100,20 @@ public class TransactionService {
         return tx;
     }
 
+    /** Sets the category of an income or expense, teaching the merchant rules as an edit would. */
+    @Transactional
+    public Transaction setCategory(long userId, long id, long categoryId) {
+        Transaction tx = require(userId, id);
+        CategoryKind kind = switch (tx.getType()) {
+            case INCOME -> CategoryKind.INCOME;
+            case EXPENSE -> CategoryKind.EXPENSE;
+            default -> throw ApiException.badRequest("category.kindMismatch");
+        };
+        tx.setCategoryId(categories.requireForKind(userId, categoryId, kind).getId());
+        afterSave(userId, tx);
+        return tx;
+    }
+
     @Transactional
     public void delete(long userId, long id) {
         transactions.delete(require(userId, id));

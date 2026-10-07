@@ -639,3 +639,232 @@ export interface ImportCommitResult {
 export interface RestoreSummary {
   rows: Record<string, number>
 }
+
+// ---------------------------------------------------------------- AI
+
+export type AiTask = 'CHAT' | 'EXTRACT' | 'REPORT'
+export type AiEffort = 'LOW' | 'MEDIUM' | 'HIGH' | 'XHIGH' | 'MAX'
+export type AiConfidence = 'HIGH' | 'MEDIUM' | 'LOW'
+
+export interface AiStatus {
+  /** The user's own switch. */
+  enabled: boolean
+  shareDescriptions: boolean
+  /** Which tasks have a provider configured. */
+  tasks: Record<AiTask, boolean>
+  quota: { limit: number; used: number }
+}
+
+/** A transaction read by the AI, waiting for the user to confirm it. */
+export interface AiDraft {
+  ref: string
+  type: 'EXPENSE' | 'INCOME' | 'TRANSFER'
+  date: string
+  accountId: number | null
+  amount: string | null
+  toAccountId: number | null
+  toAmount: string | null
+  categoryId: number | null
+  description: string | null
+  confidence: AiConfidence
+  warnings: string[]
+  duplicate: boolean
+  recorded: boolean
+}
+
+export interface AiDraftInput {
+  ref: string
+  type: AiDraft['type']
+  date: string
+  accountId: number | null
+  amount: string | null
+  toAccountId: number | null
+  toAmount: string | null
+  categoryId: number | null
+  description: string | null
+}
+
+export interface QuickAddResult {
+  drafts: AiDraft[]
+  note: string | null
+}
+
+export interface SmsResult {
+  messages: number
+  drafts: { message: number; draft: AiDraft }[]
+  ignored: { message: number; reason: string }[]
+}
+
+export interface DraftCommitResult {
+  created: number
+  skipped: number
+}
+
+export interface ConversationSummary {
+  id: number
+  title: string
+  model: string
+  providerName: string | null
+  /** False when the provider or model it started on is gone: the history stays readable. */
+  available: boolean
+  turns: number
+  updatedAt: string
+}
+
+export type ChatItemKind = 'user' | 'assistant' | 'tool' | 'drafts' | 'error'
+export type ToolStatus = 'running' | 'done' | 'error'
+
+export interface ChatItem {
+  kind: ChatItemKind
+  turn: number
+  text?: string | null
+  toolId?: string | null
+  tool?: string | null
+  label?: string | null
+  status?: ToolStatus | null
+  drafts?: AiDraft[] | null
+}
+
+export interface ConversationView {
+  id: number
+  title: string
+  model: string
+  providerName: string | null
+  available: boolean
+  full: boolean
+  running: boolean
+  items: ChatItem[]
+}
+
+export interface MonthlyAiReport {
+  headline: string
+  summary: string
+  highlights: { title: string; detail: string; tone: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE' }[]
+  suggestions: { title: string; detail: string }[]
+  createdAt: string
+  model: string | null
+}
+
+export interface AiReportView {
+  month: string
+  label: string
+  hasData: boolean
+  report: MonthlyAiReport | null
+  /** The figures changed since the report was written. */
+  stale: boolean
+}
+
+export interface CategorizeSuggestion {
+  transactionId: number
+  type: TransactionType
+  date: string
+  amount: string
+  unit: string | null
+  description: string
+  categoryId: number
+  categoryName: string
+  confidence: AiConfidence
+}
+
+export interface CategorizeResult {
+  considered: number
+  remaining: number
+  suggestions: CategorizeSuggestion[]
+}
+
+export type AiProviderKind = 'ANTHROPIC' | 'OPENAI_COMPATIBLE' | 'FAKE'
+export type AiPresetId = 'ANTHROPIC' | 'OPENAI' | 'GEMINI' | 'DEEPSEEK' | 'OPENROUTER' | 'GROQ' | 'MISTRAL' | 'XAI' | 'OLLAMA'
+  | 'LM_STUDIO' | 'CUSTOM' | 'FAKE'
+
+export interface AiPreset {
+  id: AiPresetId
+  kind: AiProviderKind
+  label: string
+  baseUrl: string
+  defaultModel: string | null
+  supportsTools: boolean
+  supportsJsonSchema: boolean
+  streamUsage: boolean
+  needsKey: boolean
+}
+
+export interface AiPresets {
+  presets: AiPreset[]
+  /** ANTHROPIC_API_KEY is set on the server. */
+  envKeyAvailable: boolean
+}
+
+export interface AiProvider {
+  id: number
+  name: string
+  kind: AiProviderKind
+  preset: AiPresetId
+  baseUrl: string
+  hasApiKey: boolean
+  keyFromEnv: boolean
+  headers: { name: string; hasValue: boolean }[]
+  queryParams: Record<string, string>
+  defaultModel: string | null
+  supportsTools: boolean
+  supportsJsonSchema: boolean
+  streamUsage: boolean
+  refusalFallback: boolean
+  enabled: boolean
+  usedBy: AiTask[]
+}
+
+export interface AiProviderInput {
+  name: string
+  preset: AiPresetId
+  baseUrl?: string
+  apiKey?: string
+  clearApiKey?: boolean
+  useEnvKey?: boolean
+  /** An empty value keeps the stored one. */
+  headers?: { name: string; value: string }[]
+  queryParams?: Record<string, string>
+  defaultModel?: string
+  supportsTools?: boolean
+  supportsJsonSchema?: boolean
+  streamUsage?: boolean
+  refusalFallback?: boolean
+  enabled?: boolean
+}
+
+export interface AiRoute {
+  task: AiTask
+  providerId: number | null
+  providerName: string | null
+  model: string | null
+  effort: AiEffort | null
+  defaultEffort: AiEffort
+}
+
+export interface AiRouteInput {
+  task: AiTask
+  providerId: number | null
+  model: string | null
+  effort: AiEffort | null
+}
+
+export interface AiTestResult {
+  ok: boolean
+  latencyMs: number
+  model: string | null
+  /** Null when tools are off for this provider. */
+  toolCalling: boolean | null
+  reply: string | null
+  error: string | null
+}
+
+export interface AiUsageDay {
+  day: string
+  task: string
+  operations: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  costUsd: string | null
+  failures: number
+}

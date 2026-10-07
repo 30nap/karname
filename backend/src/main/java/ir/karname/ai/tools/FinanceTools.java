@@ -297,6 +297,97 @@ public class FinanceTools {
         return new Outcome(json(obj("error", message)), true, null);
     }
 
+    /**
+     * The figures behind a monthly report: totals against last month and the three months
+     * before, categories, budgets, unusual spending, largest expenses, net worth at both ends of
+     * the month in every tracked unit, goals, and (for the current month) what is coming. Null
+     * when the month has no income or expenses at all.
+     */
+    public Map<String, Object> monthReport(ToolContext ctx, JalaliMonth month) {
+        JalaliMonth current = JalaliMonth.from(ctx.today());
+        boolean isCurrent = month.equals(current);
+        MonthSummary totals = dashboard.summary(ctx.userId(), month, isCurrent ? ctx.today() : null);
+        if (totals.incomeToman().signum() == 0 && totals.expenseToman().signum() == 0) {
+            return null;
+        }
+        BigDecimal income = BigDecimal.ZERO;
+        BigDecimal expense = BigDecimal.ZERO;
+        for (int i = 1; i <= 3; i++) {
+            MonthSummary s = dashboard.summary(ctx.userId(), month.plusMonths(-i), null);
+            income = income.add(s.incomeToman());
+            expense = expense.add(s.expenseToman());
+        }
+        BigDecimal three = BigDecimal.valueOf(3);
+        ObjectNodeInput monthInput = new ObjectNodeInput(month.toString());
+
+        Map<String, Object> bundle = new LinkedHashMap<>();
+        bundle.put("month", month(month.toString()));
+        if (isCurrent) {
+            bundle.put("month_in_progress", obj("days_elapsed", JalaliDate.from(ctx.today()).day(), "days_in_month", month.lengthOfMonth()));
+        }
+        bundle.put("totals", summary(totals));
+        bundle.put("previous_month", summary(dashboard.summary(ctx.userId(), month.previous(), null)));
+        bundle.put("average_of_previous_3_months", obj(
+                "income_toman", money(income.divide(three, 0, RoundingMode.HALF_EVEN)),
+                "expense_toman", money(expense.divide(three, 0, RoundingMode.HALF_EVEN))));
+        Map<String, Object> expenses = byCategory(ctx, monthInput.with("kind", "EXPENSE")).content() instanceof Map<?, ?> m ? cast(m) : Map.of();
+        bundle.put("expenses_by_category", expenses.get("categories"));
+        Map<String, Object> incomes = byCategory(ctx, monthInput.with("kind", "INCOME")).content() instanceof Map<?, ?> m ? cast(m) : Map.of();
+        bundle.put("income_by_category", incomes.get("categories"));
+        Map<String, Object> budget = cast((Map<?, ?>) budget(ctx, JSON.createObjectNode().put("month", month.toString())).content());
+        bundle.put("budgets", budget.get("budgets"));
+        bundle.put("unusual_spending", reports.anomalies(ctx.userId(), month).stream().map(a -> obj(
+                "category", a.name(),
+                "this_month_toman", money(a.currentToman()),
+                "usual_monthly_toman", money(a.averageToman()),
+                "times_usual", a.ratio() == null ? null : a.ratio().setScale(1, RoundingMode.HALF_EVEN).toPlainString())).toList());
+        bundle.put("largest_expenses", reports.top(ctx.userId(), month, 1, ReportService.Kind.EXPENSE, 5).stream().map(t -> obj(
+                "date", date(t.transaction().date()),
+                "amount_toman", money(t.valueToman()),
+                "category", t.transaction().category() == null ? null : t.transaction().category().name(),
+                "description", ctx.shareDescriptions() && t.transaction().description() != null
+                        ? Privacy.mask(t.transaction().description()) : null)).toList());
+        int back = (int) month.previous().monthsUntil(current) + 1;
+        if (back <= 120) {
+            var points = netWorth.history(ctx.userId(), back);
+            var start = points.stream().filter(p -> p.month().equals(month.previous().toString())).findFirst().orElse(null);
+            var end = points.stream().filter(p -> p.month().equals(month.toString())).findFirst().orElse(null);
+            if (start != null && end != null) {
+                Map<String, Object> units = new LinkedHashMap<>();
+                end.alternatives().forEach((code, value) -> {
+                    BigDecimal before = start.alternatives().get(code);
+                    units.put(code, obj("start", quantity(before, 2), "end", quantity(value, 2)));
+                });
+                bundle.put("net_worth", obj(
+                        "start_of_month_toman", money(start.totalToman()),
+                        "end_of_month_toman", money(end.totalToman()),
+                        "change_toman", money(end.totalToman().subtract(start.totalToman())),
+                        "in_other_units", units.isEmpty() ? null : units));
+            }
+        }
+        bundle.put("goals", goals(ctx, JSON.createObjectNode()).content() instanceof Map<?, ?> g ? g.get("goals") : null);
+        if (isCurrent) {
+            Map<String, Object> next = cast((Map<?, ?>) obligations(ctx, JSON.createObjectNode()).content());
+            next.remove("events");
+            next.remove("note");
+            bundle.put("next_30_days", next);
+        }
+        return bundle;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> cast(Map<?, ?> map) {
+        return new LinkedHashMap<>((Map<String, Object>) map);
+    }
+
+    /** Tool input built in code. */
+    private record ObjectNodeInput(String month) {
+
+        JsonNode with(String key, String value) {
+            return JSON.createObjectNode().put("from_month", month).put("to_month", month).put(key, value);
+        }
+    }
+
     // ---------------------------------------------------------------- tools
 
     private Result overview(ToolContext ctx, JsonNode in) {

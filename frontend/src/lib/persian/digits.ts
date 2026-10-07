@@ -15,6 +15,19 @@ export function toPersianDigits(text: string): string {
 }
 
 /**
+ * Converts the numbers inside free text to Persian form: digits, the separators between them
+ * ("1,250.5" → "۱٬۲۵۰٫۵") and a percent sign that follows a digit ("12%" → "۱۲٪").
+ */
+export function toPersianNumerals(text: string): string {
+  return toPersianDigits(
+    text
+      .replace(/(?<=\d),(?=\d{3}(?!\d))/g, '٬')
+      .replace(/(?<=\d)\.(?=\d)/g, '٫')
+      .replace(/(?<=\d)\s?%/g, '٪'),
+  )
+}
+
+/**
  * Normalizes a user-typed amount ("۱٬۲۵۰٬۰۰۰", "1,250,000", "۲٫۵") to a plain decimal string
  * ("1250000", "2.5"). Returns null when the text is not a number.
  */

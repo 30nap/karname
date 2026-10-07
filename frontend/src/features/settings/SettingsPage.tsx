@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useMe } from '@/features/auth/api'
 import { useSearchParams } from 'react-router'
 import { AdminSettings } from './AdminSettings'
+import { AiSettings } from './AiSettings'
 import { DisplaySettings } from './DisplaySettings'
 import { SecuritySettings } from './SecuritySettings'
 
@@ -18,10 +19,12 @@ export function SettingsPage() {
           <TabsTrigger value="general">عمومی</TabsTrigger>
           <TabsTrigger value="security">حساب و امنیت</TabsTrigger>
           {me.role === 'ADMIN' ? <TabsTrigger value="admin">مدیریت</TabsTrigger> : null}
+          {me.role === 'ADMIN' ? <TabsTrigger value="ai">هوش مصنوعی</TabsTrigger> : null}
         </TabsList>
         <TabsContent value="general"><DisplaySettings /></TabsContent>
         <TabsContent value="security"><SecuritySettings /></TabsContent>
         {me.role === 'ADMIN' ? <TabsContent value="admin"><AdminSettings /></TabsContent> : null}
+        {me.role === 'ADMIN' ? <TabsContent value="ai"><AiSettings /></TabsContent> : null}
       </Tabs>
     </>
   )

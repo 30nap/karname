@@ -87,16 +87,7 @@ public class FakeLlm {
     }
 
     private static LlmResponse defaultResponse(LlmRequest request) {
-        if (request.output() != null) {
-            return text(JSON.writeValueAsString(example(request.output().schema())));
-        }
-        List<LlmMessage> messages = request.messages();
-        LlmMessage last = messages.isEmpty() ? null : messages.getLast();
-        boolean newTurn = last instanceof LlmMessage.User u && u.parts().stream().anyMatch(p -> p instanceof Part.Text);
-        if (newTurn && request.tools().stream().anyMatch(t -> t.name().equals("get_financial_overview"))) {
-            return toolCalls(call("get_financial_overview", "{}"));
-        }
-        return text("این پاسخ آزمایشی دستیار است؛ اطلاعات مالی شما بررسی شد.");
+        return FakeBehavior.respond(request);
     }
 
     /** The smallest object a schema accepts. */

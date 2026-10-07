@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -21,6 +22,8 @@ import { todayIso } from '@/lib/jalali'
 import { TRANSACTION_TYPE_LABELS } from '@/lib/labels'
 import Big from 'big.js'
 import { useDeleteTransaction, useSaveTransaction } from './api'
+import { useAiAvailable } from '@/features/ai/api'
+import { QuickAddPanel } from '@/features/ai/QuickAddPanel'
 
 type EditableType = 'EXPENSE' | 'INCOME' | 'TRANSFER'
 
@@ -37,6 +40,8 @@ export interface TransactionDraft {
 interface OpenOptions {
   transaction?: Transaction
   draft?: TransactionDraft
+  /** Start with the AI's free-text entry instead of the form. */
+  text?: boolean
 }
 
 const DialogContext = createContext<(options?: OpenOptions) => void>(() => {})
@@ -66,15 +71,19 @@ export function TransactionDialogProvider({ children }: { children: ReactNode })
     <DialogContext.Provider value={open}>
       {children}
       <Dialog open={state.open} onOpenChange={(o) => setState((s) => ({ ...s, open: o }))}>
-        {state.open ? (
-          <TransactionForm key={state.key} options={state.options} onDone={() => setState((s) => ({ ...s, open: false }))} />
+        {state.open && state.options.text ? (
+          <QuickAddPanel key={state.key} onManual={() => setState((s) => ({ ...s, options: {}, key: s.key + 1 }))} />
+        ) : state.open ? (
+          <TransactionForm key={state.key} options={state.options} onDone={() => setState((s) => ({ ...s, open: false }))}
+            onText={() => setState((s) => ({ ...s, options: { text: true }, key: s.key + 1 }))} />
         ) : null}
       </Dialog>
     </DialogContext.Provider>
   )
 }
 
-function TransactionForm({ options, onDone }: { options: OpenOptions; onDone: () => void }) {
+function TransactionForm({ options, onDone, onText }: { options: OpenOptions; onDone: () => void; onText: () => void }) {
+  const textEntry = useAiAvailable('EXTRACT')
   const prefs = usePrefs()
   const f = useFormat()
   const commodities = useCommodityMap()
@@ -205,6 +214,12 @@ function TransactionForm({ options, onDone }: { options: OpenOptions; onDone: ()
       <DialogHeader>
         <DialogTitle>{title}</DialogTitle>
         <DialogDescription className="sr-only">ثبت یا ویرایش درآمد، هزینه یا انتقال</DialogDescription>
+        {!editing && textEntry ? (
+          <button type="button" onClick={onText}
+            className="flex w-fit cursor-pointer items-center gap-1.5 text-sm font-medium text-primary hover:underline">
+            <Sparkles className="size-4" />یا با یک جمله بنویسید
+          </button>
+        ) : null}
       </DialogHeader>
       <DialogBody>
         <form id="transaction-form" className="grid gap-4" onSubmit={(e) => { e.preventDefault(); submit(false) }} noValidate>

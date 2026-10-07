@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Plus, ReceiptText, Search, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, ReceiptText, Search, Sparkles, Wand2, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { Button } from '@/components/ui/button'
@@ -16,6 +16,8 @@ import { addMonthsToKey, currentMonthKey, monthRange } from '@/lib/jalali'
 import { useTransactionPages } from './api'
 import { TransactionList } from './TransactionList'
 import { useTransactionDialog } from './TransactionDialog'
+import { useAiAvailable } from '@/features/ai/api'
+import { CategorizeDialog } from '@/features/ai/CategorizeDialog'
 
 type TypeFilter = 'ALL' | 'EXPENSE' | 'INCOME' | 'TRANSFER'
 
@@ -34,6 +36,8 @@ export function TransactionsPage() {
   const rangeTo = params.get('to')
   const customRange = rangeFrom !== null && rangeTo !== null
   const [search, setSearch] = useState(params.get('q') ?? '')
+  const ai = useAiAvailable('EXTRACT')
+  const [categorizing, setCategorizing] = useState(false)
 
   const update = (changes: Record<string, string | null>) => {
     const next = new URLSearchParams(params)
@@ -63,8 +67,15 @@ export function TransactionsPage() {
     <>
       <PageHeader
         title="تراکنش‌ها"
-        actions={<Button onClick={() => open()}><Plus />تراکنش جدید</Button>}
+        actions={(
+          <>
+            {ai ? <Button variant="outline" onClick={() => setCategorizing(true)}><Wand2 />دسته‌بندی هوشمند</Button> : null}
+            {ai ? <Button variant="outline" onClick={() => open({ text: true })}><Sparkles />ثبت با متن</Button> : null}
+            <Button onClick={() => open()}><Plus />تراکنش جدید</Button>
+          </>
+        )}
       />
+      <CategorizeDialog open={categorizing} onOpenChange={setCategorizing} />
 
       <div className="mb-4 flex flex-col gap-3">
         {/* Mobile: month on its own row, then a two-column grid; desktop: one row. */}

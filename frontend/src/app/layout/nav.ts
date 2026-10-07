@@ -1,4 +1,4 @@
-import { ArrowLeftRight, ChartPie, Coins, DatabaseBackup, FileText, Flag, Landmark, LayoutDashboard, PiggyBank, Repeat, Settings, Tags, WalletCards, type LucideIcon } from 'lucide-react'
+import { ArrowLeftRight, ChartPie, Coins, DatabaseBackup, FileText, Flag, Landmark, LayoutDashboard, MessageSquareText, PiggyBank, Repeat, Settings, Sparkles, Tags, WalletCards, type LucideIcon } from 'lucide-react'
 
 export interface NavItem {
   to: string
@@ -20,6 +20,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/', label: 'داشبورد', icon: LayoutDashboard, primary: true },
       { to: '/transactions', label: 'تراکنش‌ها', icon: ArrowLeftRight, primary: true },
       { to: '/accounts', label: 'حساب‌ها', icon: WalletCards, primary: true },
+      { to: '/assistant', label: 'دستیار', icon: Sparkles, primary: true },
     ],
   },
   {
@@ -46,6 +47,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'سیستم',
     items: [
       { to: '/categories', label: 'دسته‌بندی‌ها', icon: Tags },
+      { to: '/sms', label: 'ورود پیامک بانکی', icon: MessageSquareText },
       { to: '/data', label: 'ورود و خروج داده', icon: DatabaseBackup },
       { to: '/settings', label: 'تنظیمات', icon: Settings },
     ],
