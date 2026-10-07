@@ -38,6 +38,8 @@ public class BackupService {
     public static final String FORMAT = "karname-backup";
     public static final int VERSION = 1;
     private static final String COMMODITY = "#commodity";
+    /** A reference to instance-wide settings (an AI provider): not portable, so restored as empty. */
+    private static final String DETACHED = "#detached";
     private static final int MAX_ROWS = 1_000_000;
 
     /** A user-owned table, in restore order: referenced tables come first. */
@@ -64,7 +66,12 @@ public class BackupService {
             new Table("transactions", "user_id = :u",
                     Map.of("account_id", "accounts", "to_account_id", "accounts", "category_id", "categories"), true),
             // the user's own prices: entered by hand or implied by their exchanges
-            new Table("prices", "user_id = :u", Map.of("commodity_id", COMMODITY, "transaction_id", "transactions"), true));
+            new Table("prices", "user_id = :u", Map.of("commodity_id", COMMODITY, "transaction_id", "transactions"), true),
+            // conversations come back as history: they cannot continue on another instance's provider
+            new Table("ai_conversations", "user_id = :u", Map.of("provider_id", DETACHED), true),
+            new Table("ai_messages", "conversation_id IN (SELECT id FROM ai_conversations WHERE user_id = :u)",
+                    Map.of("conversation_id", "ai_conversations"), true),
+            new Table("ai_reports", "user_id = :u", Map.of(), true));
 
     /** Columns never copied: the owner is the restoring user, ids are reassigned, versions restart. */
     private static final Set<String> SKIPPED = Set.of("id", "user_id", "version");
@@ -169,6 +176,8 @@ public class BackupService {
     private void deleteUserData(long userId) {
         // children first; most of the rest would cascade, but explicit order keeps it predictable
         for (String sql : List.of(
+                "DELETE FROM ai_reports WHERE user_id = ?",
+                "DELETE FROM ai_conversations WHERE user_id = ?",
                 "DELETE FROM notifications WHERE user_id = ?",
                 "DELETE FROM prices WHERE user_id = ?",
                 "DELETE FROM transactions WHERE user_id = ?",
@@ -235,7 +244,9 @@ public class BackupService {
             }
             Object value = e.getValue();
             String ref = table.refs().get(column);
-            if (value != null && ref != null) {
+            if (DETACHED.equals(ref)) {
+                value = null;
+            } else if (value != null && ref != null) {
                 value = ref.equals(COMMODITY) ? commodity(commodityIds, value, table) : mapped(ids.get(ref), value, table, column);
             } else if (value != null && table.name().equals("transactions") && column.equals("external_ref")) {
                 value = rewriteRef(String.valueOf(value), ids);
@@ -373,6 +384,8 @@ public class BackupService {
             Object value = value(rs, i);
             if (value != null && COMMODITY.equals(table.refs().get(column))) {
                 value = codes.get(((Number) value).longValue());
+            } else if (DETACHED.equals(table.refs().get(column))) {
+                value = null;
             }
             row.put(column, value);
         }

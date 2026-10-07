@@ -71,6 +71,14 @@ karname:
   scheduling:
     # Background jobs: recurring postings, notifications and automatic prices.
     enabled: ${KARNAME_SCHEDULING_ENABLED:true}
+  ai:
+    # Optional: with an Anthropic API key in the environment, a ready provider is set up on first
+    # start (the key is read from the environment each time, never stored in the database).
+    anthropic-api-key: ${ANTHROPIC_API_KEY:}
+    # AI requests per user per day, until an administrator sets a limit in the settings.
+    default-daily-limit: ${KARNAME_AI_DAILY_LIMIT:100}
+    # An offline scripted model for demos and end-to-end tests; never enable in production.
+    fake-enabled: ${KARNAME_AI_FAKE:false}
   security:
     # Base64-encoded 32-byte key for AES-GCM encryption of stored API keys.
     # Required in production; generate with: openssl rand -base64 32

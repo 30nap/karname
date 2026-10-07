@@ -5,6 +5,7 @@ import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
@@ -24,4 +25,10 @@ class ArchitectureTest {
     static final ArchRule coreModulesDoNotDependOnFeatures = noClasses().that()
             .resideInAnyPackage("ir.karname.commodity..", "ir.karname.account..", "ir.karname.category..", "ir.karname.transaction..")
             .should().dependOnClassesThat().resideInAnyPackage("ir.karname.ledger..", "ir.karname.report..", "ir.karname.ai..");
+
+    /** The model adapters know nothing of finance: they can be reused or replaced on their own. */
+    @ArchTest
+    static final ArchRule llmAdaptersAreSelfContained = classes().that().resideInAPackage("ir.karname.ai.llm..")
+            .should().onlyDependOnClassesThat().resideInAnyPackage("ir.karname.ai.llm..", "ir.karname.common..", "java..", "javax..",
+                    "org.springframework..", "org.slf4j..", "tools.jackson..", "com.fasterxml..", "com.anthropic..");
 }

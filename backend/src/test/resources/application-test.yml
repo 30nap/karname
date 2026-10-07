@@ -5,6 +5,10 @@ spring:
 karname:
   scheduling:
     enabled: false
+  ai:
+    fake-enabled: true
+    # never pick up a key from the developer's environment in tests
+    anthropic-api-key: ""
   security:
     # Fixed key for tests only.
     secret-key: 1SYZTDQWMCfNQn8hxDBaoITCTdTH2jlG6ZUKyZIuAMY=

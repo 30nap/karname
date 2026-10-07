@@ -49,6 +49,8 @@ public abstract class AbstractIntegrationTest {
             "DELETE FROM users",
             "DELETE FROM prices",
             "DELETE FROM app_settings",
+            "DELETE FROM ai_usage",
+            "DELETE FROM ai_providers",
             // the Nobitex source seeded by V5 stays; tests add their own
             "DELETE FROM price_sources WHERE name <> 'نوبیتکس'");
 
