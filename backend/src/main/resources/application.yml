@@ -94,5 +94,7 @@ karname:
     remember-me-duration: ${KARNAME_REMEMBER_ME_DURATION:30d}
     login-max-attempts: ${KARNAME_LOGIN_MAX_ATTEMPTS:5}
     login-lockout: ${KARNAME_LOGIN_LOCKOUT:15m}
+    # New accounts per client address per hour.
+    registrations-per-hour: ${KARNAME_REGISTRATIONS_PER_HOUR:10}
     cookie-secure: ${KARNAME_COOKIE_SECURE:false}
     secret-key-file: ${KARNAME_SECRET_KEY_FILE:./data/secret.key}

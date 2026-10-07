@@ -15,14 +15,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Component
 public class LoginRateLimiter {
 
-    private static final int MAX_REGISTRATIONS_PER_HOUR = 10;
-
     private final int maxAttempts;
+    private final int maxRegistrationsPerHour;
     private final Cache<String, AtomicInteger> failures;
     private final Cache<String, AtomicInteger> registrations;
 
     public LoginRateLimiter(KarnameProperties properties) {
         this.maxAttempts = properties.security().loginMaxAttempts();
+        this.maxRegistrationsPerHour = properties.security().registrationsPerHour();
         this.failures = Caffeine.newBuilder().expireAfterWrite(properties.security().loginLockout()).maximumSize(100_000).build();
         this.registrations = Caffeine.newBuilder().expireAfterWrite(java.time.Duration.ofHours(1)).maximumSize(100_000).build();
     }
@@ -44,7 +44,7 @@ public class LoginRateLimiter {
 
     public void checkRegistration(String ip) {
         AtomicInteger count = registrations.asMap().computeIfAbsent(ip, k -> new AtomicInteger());
-        if (count.incrementAndGet() > MAX_REGISTRATIONS_PER_HOUR) {
+        if (count.incrementAndGet() > maxRegistrationsPerHour) {
             throw ApiException.tooManyRequests("auth.tooManyRegistrations");
         }
     }

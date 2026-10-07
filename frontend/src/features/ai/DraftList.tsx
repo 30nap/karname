@@ -1,6 +1,5 @@
 import { AlertTriangle, Check, Pencil, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { FormField } from '@/components/ui/form-field'
@@ -14,7 +13,6 @@ import { useFormat } from '@/app/preferences'
 import { useAccounts } from '@/features/accounts/api'
 import { useCategories } from '@/features/categories/api'
 import { useCommodityMap } from '@/features/commodities/api'
-import { ApiError } from '@/lib/api/client'
 import type { AiDraft, AiDraftInput } from '@/lib/api/types'
 import { cn } from '@/lib/cn'
 import { fromDisplayAmount, toDisplayAmount } from '@/lib/format/money'
@@ -63,13 +61,7 @@ export function DraftList({ drafts, labels, className }: {
 
   const record = (list: AiDraft[]) => {
     commit.mutate(list.map(toInput), {
-      onSuccess: (result) => {
-        setRecorded((s) => new Set([...s, ...list.map((d) => d.ref)]))
-        toast.success(result.created > 0
-          ? `${f.number(result.created)} تراکنش ثبت شد.`
-          : 'این تراکنش‌ها قبلاً ثبت شده بودند.')
-      },
-      onError: (e) => toast.error(e instanceof ApiError ? e.message : 'ثبت تراکنش ناموفق بود.'),
+      onSuccess: () => setRecorded((s) => new Set([...s, ...list.map((d) => d.ref)])),
     })
   }
 

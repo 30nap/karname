@@ -71,9 +71,13 @@ export function useLogout() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => api.post<void>('/auth/logout'),
-    onSettled: async () => {
-      queryClient.clear()
-      await queryClient.invalidateQueries({ queryKey: authStatusKey })
+    onSettled: () => {
+      // Signed out in one cache update, so the route guard leaves the app before any component
+      // reads the user again (clearing the cache first let the menu re-render without one).
+      queryClient.setQueryData<AuthStatus>(authStatusKey, (old) => ({
+        authenticated: false, registrationOpen: old?.registrationOpen ?? false, hasUsers: true, user: null,
+      }))
+      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== authStatusKey[0] })
     },
   })
 }

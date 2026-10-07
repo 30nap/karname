@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api/client'
+import { toast } from 'sonner'
+import { useFormat } from '@/app/preferences'
+import { api, ApiError } from '@/lib/api/client'
 import type {
   AiDraftInput,
   AiPresets,
@@ -48,12 +50,21 @@ export function useSmsImport() {
   })
 }
 
+/**
+ * Records drafts. The outcome is announced here rather than by the caller: a chat reply can be
+ * replaced by its stored copy while the request runs, unmounting the list that sent it.
+ */
 export function useCommitDrafts() {
   const queryClient = useQueryClient()
+  const f = useFormat()
   return useMutation({
     mutationFn: (drafts: AiDraftInput[]) => api.post<DraftCommitResult>('/ai/drafts/commit', { drafts }),
     meta: { toastError: false },
-    onSuccess: () => Promise.all([invalidateFinance(queryClient), queryClient.invalidateQueries({ queryKey: ['ai', 'conversation'] })]),
+    onSuccess: (result) => {
+      toast.success(result.created > 0 ? `${f.number(result.created)} تراکنش ثبت شد.` : 'این تراکنش‌ها قبلاً ثبت شده بودند.')
+      return Promise.all([invalidateFinance(queryClient), queryClient.invalidateQueries({ queryKey: ['ai', 'conversation'] })])
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : 'ثبت تراکنش ناموفق بود.'),
   })
 }
 

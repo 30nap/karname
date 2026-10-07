@@ -20,7 +20,8 @@ public record KarnameProperties(
             @DefaultValue("30d") Duration rememberMeDuration,
             @DefaultValue("5") int loginMaxAttempts,
             @DefaultValue("15m") Duration loginLockout,
-            @DefaultValue("false") boolean cookieSecure) {
+            @DefaultValue("false") boolean cookieSecure,
+            @DefaultValue("10") int registrationsPerHour) {
     }
 
     /**
