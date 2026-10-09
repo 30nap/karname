@@ -11,6 +11,8 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -88,7 +90,19 @@ public class AiUsageService {
                 .param("outcome", op.outcome().name())
                 .param("at", clock.instant().atOffset(ZoneOffset.UTC))
                 .update();
-        pending.asMap().entrySet().stream().filter(e -> e.getValue() == op.userId()).findFirst()
+        // the reservation goes only once the row is committed: in between, a parallel check would see neither
+        long userId = op.userId();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                release(userId);
+            }
+        });
+    }
+
+    /** Gives back the unit {@link #checkQuota} held for an operation that ends without being recorded. */
+    public void release(long userId) {
+        pending.asMap().entrySet().stream().filter(e -> e.getValue() == userId).findFirst()
                 .ifPresent(e -> pending.invalidate(e.getKey()));
     }
 
@@ -115,12 +129,17 @@ public class AiUsageService {
         return new Quota(dailyLimit(), used);
     }
 
-    /** @throws ApiException 429 when the user has used today's allowance */
-    /** Refuses when today's quota is used up, else holds one unit of it until the operation is recorded. */
+    /**
+     * Refuses when today's quota is used up, else holds one unit of it until the operation is
+     * recorded or {@linkplain #release released}.
+     *
+     * @throws ApiException 429 when the user has used today's allowance
+     */
     public void checkQuota(long userId) {
         synchronized (pending) {
-            Quota quota = quota(userId);
+            // reservations before rows: one released after this point belongs to a row committed before the count
             long waiting = pending.asMap().values().stream().filter(id -> id == userId).count();
+            Quota quota = quota(userId);
             if (quota.used() + waiting >= quota.limit()) {
                 throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "ai.quotaExceeded", quota.limit());
             }

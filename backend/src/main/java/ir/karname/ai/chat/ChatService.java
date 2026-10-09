@@ -206,12 +206,14 @@ public class ChatService {
             effort = route.filter(r -> r.providerId() == c.getProviderId() && r.model().equals(c.getModel()))
                     .map(ResolvedRoute::effort).orElse(AiTask.CHAT.defaultEffort());
         }
-        usage.checkQuota(userId);
         Running handle = new Running(conversationId == null ? -1 : conversationId);
         if (running.putIfAbsent(userId, handle) != null) {
             throw ApiException.conflict("ai.busy");
         }
+        boolean reserved = false;
         try {
+            usage.checkQuota(userId);
+            reserved = true;
             boolean created = false;
             if (conversation == null) {
                 ResolvedRoute r = route.orElseThrow();
@@ -223,6 +225,9 @@ public class ChatService {
             return new Turn(userId, conversation.getId(), conversation.getTitle(), created, clean, client, model, effort, providerId,
                     providerName, handle);
         } catch (RuntimeException e) {
+            if (reserved) {
+                usage.release(userId);
+            }
             running.remove(userId);
             throw e;
         }
@@ -316,6 +321,8 @@ public class ChatService {
         } finally {
             if (calls > 0) {
                 record(turn, calls, total, outcome);
+            } else {
+                usage.release(turn.userId());
             }
             running.remove(turn.userId(), turn.handle());
             sink.close();
@@ -332,6 +339,7 @@ public class ChatService {
 
     /** Releases a prepared turn that will not run (e.g. it could not be scheduled). */
     public void abandon(Turn turn) {
+        usage.release(turn.userId());
         running.remove(turn.userId(), turn.handle());
     }
 
