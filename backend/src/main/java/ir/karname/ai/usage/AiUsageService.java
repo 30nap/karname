@@ -1,5 +1,7 @@
 package ir.karname.ai.usage;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import ir.karname.ai.llm.LlmUsage;
 import ir.karname.common.config.KarnameProperties;
 import ir.karname.common.web.ApiException;
@@ -12,10 +14,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Accounting of AI use: one row per operation (a chat turn, an extraction, a report…) with its
@@ -48,6 +52,11 @@ public class AiUsageService {
     private final SystemSettingsService settings;
     private final KarnameProperties properties;
     private final Clock clock;
+    /**
+     * Operations allowed but not recorded yet, counted against the quota so parallel requests
+     * cannot all pass the check before any of them is recorded. One never recorded expires.
+     */
+    private final Cache<String, Long> pending = Caffeine.newBuilder().expireAfterWrite(Duration.ofMinutes(10)).build();
 
     public AiUsageService(JdbcClient jdbc, SystemSettingsService settings, KarnameProperties properties, Clock clock) {
         this.jdbc = jdbc;
@@ -79,6 +88,8 @@ public class AiUsageService {
                 .param("outcome", op.outcome().name())
                 .param("at", clock.instant().atOffset(ZoneOffset.UTC))
                 .update();
+        pending.asMap().entrySet().stream().filter(e -> e.getValue() == op.userId()).findFirst()
+                .ifPresent(e -> pending.invalidate(e.getKey()));
     }
 
     @Transactional(readOnly = true)
@@ -105,10 +116,15 @@ public class AiUsageService {
     }
 
     /** @throws ApiException 429 when the user has used today's allowance */
+    /** Refuses when today's quota is used up, else holds one unit of it until the operation is recorded. */
     public void checkQuota(long userId) {
-        Quota quota = quota(userId);
-        if (quota.used() >= quota.limit()) {
-            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "ai.quotaExceeded", quota.limit());
+        synchronized (pending) {
+            Quota quota = quota(userId);
+            long waiting = pending.asMap().values().stream().filter(id -> id == userId).count();
+            if (quota.used() + waiting >= quota.limit()) {
+                throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "ai.quotaExceeded", quota.limit());
+            }
+            pending.put(UUID.randomUUID().toString(), userId);
         }
     }
 

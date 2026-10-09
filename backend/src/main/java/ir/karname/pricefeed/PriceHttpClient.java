@@ -27,7 +27,8 @@ class PriceHttpClient {
 
     private final HttpClient client = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
-            .followRedirects(HttpClient.Redirect.NORMAL)
+            // a redirect could carry the key headers to another host, or reach an address the settings would refuse
+            .followRedirects(HttpClient.Redirect.NEVER)
             .proxy(ProxySelector.getDefault())
             .build();
 

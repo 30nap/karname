@@ -3,6 +3,7 @@ package ir.karname.pricefeed;
 import ir.karname.commodity.Commodity;
 import ir.karname.commodity.CommodityService;
 import ir.karname.commodity.PriceService;
+import ir.karname.common.OutboundUrls;
 import ir.karname.common.config.KarnameProperties;
 import ir.karname.common.crypto.SecretCipher;
 import ir.karname.common.persian.PersianText;
@@ -17,8 +18,6 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -350,15 +349,7 @@ public class PriceFeedService {
     }
 
     private static boolean validUrl(String url) {
-        if (url.length() > 500) {
-            return false;
-        }
-        try {
-            URI uri = new URI(url);
-            return ("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme())) && uri.getHost() != null;
-        } catch (URISyntaxException e) {
-            return false;
-        }
+        return OutboundUrls.isAllowed(url);
     }
 
     private SourceView view(PriceSource s) {

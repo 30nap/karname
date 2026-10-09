@@ -11,6 +11,7 @@ import ir.karname.ai.llm.LlmResponse;
 import ir.karname.ai.llm.Part;
 import ir.karname.ai.llm.StopReason;
 import ir.karname.ai.llm.ToolSpec;
+import ir.karname.common.OutboundUrls;
 import ir.karname.common.config.KarnameProperties;
 import ir.karname.common.crypto.SecretCipher;
 import ir.karname.common.web.ApiException;
@@ -399,13 +400,12 @@ public class AiProviderService {
     }
 
     private static boolean validUrl(String url) {
-        if (url == null || url.isEmpty() || url.length() > 500) {
+        if (!OutboundUrls.isAllowed(url)) {
             return false;
         }
         try {
             URI uri = new URI(url);
-            return ("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme())) && uri.getHost() != null
-                    && uri.getQuery() == null && uri.getFragment() == null && uri.getUserInfo() == null;
+            return uri.getQuery() == null && uri.getFragment() == null;
         } catch (URISyntaxException e) {
             return false;
         }

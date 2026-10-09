@@ -55,6 +55,7 @@ services:
     environment:
       KARNAME_BACKEND: backend:8080
       KARNAME_HSTS: ${KARNAME_HSTS:-}
+      KARNAME_REAL_IP_FROM: ${KARNAME_REAL_IP_FROM:-}
     ports:
       - "${KARNAME_BIND:-127.0.0.1}:${KARNAME_HTTP_PORT:-8080}:80"
     networks: [internal]

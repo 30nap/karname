@@ -69,7 +69,8 @@ public final class OpenAiCompatibleLlmClient implements LlmClient {
         this.baseUrl = url;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(CONNECT_TIMEOUT)
-                .followRedirects(HttpClient.Redirect.NORMAL)
+                // a redirect could carry the key headers to another host, or reach an address the settings would refuse
+                .followRedirects(HttpClient.Redirect.NEVER)
                 .proxy(ProxySelector.getDefault())
                 .build();
     }

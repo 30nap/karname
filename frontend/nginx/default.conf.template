@@ -27,6 +27,9 @@ server {
     server_name _;
     root /usr/share/nginx/html;
 
+    # the client's address when a trusted proxy stands in front (empty otherwise)
+    include /etc/nginx/snippets/real-ip.conf;
+
     # full JSON backups can be restored through the API
     client_max_body_size 52m;
 
