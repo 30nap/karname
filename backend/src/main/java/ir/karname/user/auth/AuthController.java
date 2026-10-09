@@ -111,7 +111,8 @@ public class AuthController {
         boolean passwordOk = passwordEncoder.matches(request.password(), user != null ? user.getPasswordHash() : dummyHash);
         if (user == null || !passwordOk || !user.isEnabled()) {
             rateLimiter.recordFailure(username, ip);
-            throw ApiException.unauthorized(user != null && passwordOk ? "auth.disabled" : "auth.invalidCredentials");
+            // one answer for all three: a distinct one for disabled accounts would confirm the password
+            throw ApiException.unauthorized("auth.invalidCredentials");
         }
         if (user.isTotpEnabled()) {
             String code = PersianText.normalizeDigits(request.totpCode());

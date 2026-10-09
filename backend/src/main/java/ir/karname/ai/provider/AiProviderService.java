@@ -269,6 +269,8 @@ public class AiProviderService {
         AiProvider draft = new AiProvider();
         if (id != null) {
             AiProvider stored = require(id);
+            // the stored address too, so a changed one is noticed and the secrets are not lent to it
+            draft.setBaseUrl(stored.getBaseUrl());
             draft.setApiKeyEncrypted(stored.getApiKeyEncrypted());
             draft.setHeadersEncrypted(stored.getHeadersEncrypted());
             draft.setKeyFromEnv(stored.isKeyFromEnv());
@@ -299,13 +301,21 @@ public class AiProviderService {
         if (model != null && !MODEL.matcher(model).matches()) {
             throw ApiException.badRequest("aiProvider.invalidModel");
         }
+        // stored secrets only ever go to the address they were entered for
+        boolean moved = p.getBaseUrl() != null && !sameAddress(p.getBaseUrl(), baseUrl);
+        if (moved && p.getApiKeyEncrypted() != null && !StringUtils.hasText(r.apiKey()) && !Boolean.TRUE.equals(r.clearApiKey())) {
+            throw ApiException.badRequest("aiProvider.keyForNewUrl");
+        }
         p.setName(name);
         p.setPreset(r.preset());
         p.setKind(kind);
         p.setBaseUrl(baseUrl);
         p.setDefaultModel(model);
         applyKey(p, r, kind);
-        Map<String, String> headers = mergedHeaders(p, r.headers());
+        if (p.isKeyFromEnv() && !sameAddress(baseUrl, AiPreset.ANTHROPIC.baseUrl())) {
+            throw ApiException.badRequest("aiProvider.envKeyOfficialOnly");
+        }
+        Map<String, String> headers = mergedHeaders(p, r.headers(), moved);
         p.setHeadersEncrypted(headers.isEmpty() ? null : cipher.encrypt(json.writeValueAsString(headers)));
         Map<String, String> params = queryParams(r.queryParams());
         p.setQueryParams(params.isEmpty() ? null : json.writeValueAsString(params));
@@ -338,7 +348,11 @@ public class AiProviderService {
         }
     }
 
-    private Map<String, String> mergedHeaders(AiProvider p, List<HeaderInput> input) {
+    private static boolean sameAddress(String a, String b) {
+        return a.replaceAll("/+$", "").equalsIgnoreCase(b.replaceAll("/+$", ""));
+    }
+
+    private Map<String, String> mergedHeaders(AiProvider p, List<HeaderInput> input, boolean moved) {
         Map<String, String> stored = clients.headers(p);
         Map<String, String> result = new LinkedHashMap<>();
         if (input == null) {
@@ -352,7 +366,11 @@ public class AiProviderService {
             if (!HEADER_NAME.matcher(name).matches()) {
                 throw ApiException.badRequest("aiProvider.invalidHeaders");
             }
-            String value = h.value() == null || h.value().isEmpty() ? stored.get(name) : h.value().strip();
+            boolean kept = h.value() == null || h.value().isEmpty();
+            if (kept && moved && stored.containsKey(name)) {
+                throw ApiException.badRequest("aiProvider.keyForNewUrl");
+            }
+            String value = kept ? stored.get(name) : h.value().strip();
             if (value == null || value.length() > 4000 || value.contains("\n") || value.contains("\r")) {
                 throw ApiException.badRequest("aiProvider.invalidHeaders");
             }

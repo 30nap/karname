@@ -30,7 +30,7 @@ export function useTotpSetup() {
 export function useTotpEnable() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (code: string) => api.post<{ recoveryCodes: string[] }>('/me/totp/enable', { code }),
+    mutationFn: (input: { code: string; password: string }) => api.post<{ recoveryCodes: string[] }>('/me/totp/enable', input),
     meta: { toastError: false },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: authStatusKey }),
   })

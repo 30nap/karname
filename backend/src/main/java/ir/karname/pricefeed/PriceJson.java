@@ -1,5 +1,6 @@
 package ir.karname.pricefeed;
 
+import ir.karname.common.Decimals;
 import ir.karname.common.persian.PersianNumbers;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.DeserializationFeature;
@@ -32,7 +33,8 @@ final class PriceJson {
         }
         Optional<BigDecimal> value = node.isNumber() ? Optional.of(node.decimalValue())
                 : node.isString() ? PersianNumbers.parseDecimal(node.asString()) : Optional.empty();
-        return value.filter(v -> v.signum() > 0);
+        // a hostile or broken source must not hand the price math an extreme number
+        return value.filter(v -> Decimals.isReasonable(v) && v.signum() > 0);
     }
 
     static String describe(JsonNode node) {

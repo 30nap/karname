@@ -101,9 +101,36 @@ class AiProviderAdminIntegrationTest extends AbstractIntegrationTest {
         assertThat(call.header("X-Org")).isEqualTo("org-secret");
         assertThat(call.query()).isEqualTo("api-version=2026-01-01");
 
+        // stored secrets are not lent to another address, neither for a try nor on save
+        Map<String, Object> elsewhere = provider(null);
+        elsewhere.put("baseUrl", "https://collector.example/v1");
+        elsewhere.put("headers", List.of(Map.of("name", "X-Org", "value", "")));
+        mvc.perform(postAs(admin, "/api/v1/admin/ai/providers/test?id={id}", Map.of("provider", elsewhere, "model", "model-a"), id))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("aiProvider.keyForNewUrl"));
+        mvc.perform(putAs(admin, "/api/v1/admin/ai/providers/{id}", elsewhere, id))
+                .andExpect(jsonPath("$.code").value("aiProvider.keyForNewUrl"));
+        elsewhere.put("apiKey", "sk-for-the-new-address");
+        mvc.perform(putAs(admin, "/api/v1/admin/ai/providers/{id}", elsewhere, id))
+                .andExpect(jsonPath("$.code").value("aiProvider.keyForNewUrl"));
+        elsewhere.put("headers", List.of(Map.of("name", "X-Org", "value", "org-new")));
+        mvc.perform(putAs(admin, "/api/v1/admin/ai/providers/{id}", elsewhere, id)).andExpect(status().isOk());
+
         Map<String, Object> cleared = provider(null);
         cleared.put("clearApiKey", true);
+        cleared.put("headers", List.of(Map.of("name", "X-Org", "value", "org-secret")));
         mvc.perform(putAs(admin, "/api/v1/admin/ai/providers/{id}", cleared, id)).andExpect(jsonPath("$.hasApiKey").value(false));
+    }
+
+    @Test
+    void theEnvironmentKeyOnlyGoesToAnthropicItself() throws Exception {
+        Map<String, Object> gateway = new HashMap<>(Map.of("name", "درگاه", "preset", "ANTHROPIC", "baseUrl", "https://gateway.example",
+                "useEnvKey", true));
+        mvc.perform(postAs(admin, "/api/v1/admin/ai/providers", gateway))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("aiProvider.envKeyOfficialOnly"));
+        gateway.put("baseUrl", "https://api.anthropic.com/");
+        mvc.perform(postAs(admin, "/api/v1/admin/ai/providers", gateway)).andExpect(status().isCreated());
     }
 
     @Test

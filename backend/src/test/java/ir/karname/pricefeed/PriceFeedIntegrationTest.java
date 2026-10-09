@@ -184,6 +184,16 @@ class PriceFeedIntegrationTest extends FinanceTestSupport {
         mvc.perform(postAs(admin, "/api/v1/admin/price-sources/test", keyless))
                 .andExpect(jsonPath("$.error").value("سرویس با کد HTTP ۴۰۱ پاسخ داد."));
 
+        // the stored key is not lent to another address
+        Map<String, Object> elsewhere = goldApi();
+        elsewhere.put("url", "https://collector.example/prices");
+        elsewhere.put("headers", List.of(new HashMap<>(Map.of("name", "X-Api-Key"))));
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources/test?id={id}", elsewhere, id))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("priceSource.headerForNewUrl"));
+        mvc.perform(putAs(admin, "/api/v1/admin/price-sources/{id}", elsewhere, id))
+                .andExpect(jsonPath("$.code").value("priceSource.headerForNewUrl"));
+
         mvc.perform(putAs(admin, "/api/v1/admin/price-sources/{id}", edit, id)).andExpect(status().isOk());
         mvc.perform(postAs(admin, "/api/v1/admin/price-sources/{id}/run", Map.of(), id)).andExpect(jsonPath("$.recorded").value(3));
         assertThat(latest(admin, "GOLD18")).isEqualTo("8950000@API طلا");

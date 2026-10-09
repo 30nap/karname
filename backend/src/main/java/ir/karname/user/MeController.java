@@ -46,7 +46,7 @@ public class MeController {
     public record PasswordConfirmation(@NotBlank String password) {
     }
 
-    public record TotpCode(@NotBlank @Size(max = 16) String code) {
+    public record TotpEnable(@NotBlank @Size(max = 16) String code, @NotBlank @Size(max = 200) String password) {
     }
 
     public record RecoveryCodesView(List<String> recoveryCodes) {
@@ -86,8 +86,8 @@ public class MeController {
     }
 
     @PostMapping("/totp/enable")
-    public RecoveryCodesView enableTotp(@AuthenticationPrincipal KarnamePrincipal principal, @Valid @RequestBody TotpCode request) {
-        return new RecoveryCodesView(twoFactor.enable(principal.id(), request.code()));
+    public RecoveryCodesView enableTotp(@AuthenticationPrincipal KarnamePrincipal principal, @Valid @RequestBody TotpEnable request) {
+        return new RecoveryCodesView(twoFactor.enable(principal.id(), request.code(), request.password()));
     }
 
     @PostMapping("/totp/disable")

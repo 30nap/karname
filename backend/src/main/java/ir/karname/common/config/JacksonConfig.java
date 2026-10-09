@@ -1,10 +1,15 @@
 package ir.karname.common.config;
 
+import ir.karname.common.Decimals;
 import org.springframework.boot.jackson.autoconfigure.JsonMapperBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import tools.jackson.core.JsonGenerator;
+import tools.jackson.core.JsonParser;
+import tools.jackson.databind.DeserializationContext;
 import tools.jackson.databind.SerializationContext;
+import tools.jackson.databind.deser.jdk.NumberDeserializers;
+import tools.jackson.databind.exc.InvalidFormatException;
 import tools.jackson.databind.module.SimpleModule;
 import tools.jackson.databind.ser.std.StdSerializer;
 
@@ -21,7 +26,21 @@ public class JacksonConfig {
     JsonMapperBuilderCustomizer decimalsAsStrings() {
         SimpleModule module = new SimpleModule("karname-decimals");
         module.addSerializer(BigDecimal.class, new PlainBigDecimalSerializer());
+        module.addDeserializer(BigDecimal.class, new BoundedBigDecimalDeserializer());
         return builder -> builder.addModule(module);
+    }
+
+    /** Request bodies never carry a number too large or too fine to compute with (see {@link Decimals}). */
+    static final class BoundedBigDecimalDeserializer extends NumberDeserializers.BigDecimalDeserializer {
+
+        @Override
+        public BigDecimal deserialize(JsonParser p, DeserializationContext ctxt) {
+            BigDecimal value = super.deserialize(p, ctxt);
+            if (value != null && !Decimals.isReasonable(value)) {
+                throw InvalidFormatException.from(p, "Number out of range", p.getString(), BigDecimal.class);
+            }
+            return value;
+        }
     }
 
     static final class PlainBigDecimalSerializer extends StdSerializer<BigDecimal> {

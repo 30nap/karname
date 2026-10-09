@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.OptionalLong;
 
 /** Optional TOTP second factor with single-use recovery codes. */
 @Service
@@ -42,8 +43,12 @@ public class TwoFactorService {
         return new SetupView(secret, totp.otpauthUri(secret, user.getUsername()));
     }
 
+    /**
+     * Turns two-factor sign-in on. The password is asked again: a session left open somewhere must
+     * not be enough to tie the account to someone else's authenticator.
+     */
     @Transactional
-    public List<String> enable(long userId, String code) {
+    public List<String> enable(long userId, String code, String password) {
         User user = userService.get(userId);
         if (user.isTotpEnabled()) {
             throw ApiException.conflict("totp.alreadyEnabled");
@@ -51,9 +56,14 @@ public class TwoFactorService {
         if (user.getTotpSecret() == null) {
             throw ApiException.badRequest("totp.notSetUp");
         }
-        if (!totp.verify(cipher.decrypt(user.getTotpSecret()), code)) {
+        if (password == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
+            throw ApiException.badRequest("auth.wrongPassword");
+        }
+        OptionalLong step = totp.matchingStep(cipher.decrypt(user.getTotpSecret()), code);
+        if (step.isEmpty()) {
             throw ApiException.badRequest("totp.invalidCode");
         }
+        user.setTotpLastStep(step.getAsLong());
         List<String> codes = totp.generateRecoveryCodes(RECOVERY_CODE_COUNT);
         user.setTotpRecoveryCodes(String.join(",", codes.stream().map(passwordEncoder::encode).toList()));
         user.setTotpEnabled(true);
@@ -69,16 +79,25 @@ public class TwoFactorService {
         user.setTotpEnabled(false);
         user.setTotpSecret(null);
         user.setTotpRecoveryCodes(null);
+        user.setTotpLastStep(null);
     }
 
-    /** Verifies a login code: a current TOTP code, or an unused recovery code (which is then consumed). */
+    /**
+     * Verifies a login code: a current TOTP code not used before (an observed code cannot be replayed
+     * within its validity window), or an unused recovery code (which is then consumed).
+     */
     @Transactional
     public boolean verifyLogin(long userId, String code) {
         User user = userService.get(userId);
         if (!user.isTotpEnabled() || code == null || code.isBlank()) {
             return false;
         }
-        if (totp.verify(cipher.decrypt(user.getTotpSecret()), code)) {
+        OptionalLong step = totp.matchingStep(cipher.decrypt(user.getTotpSecret()), code);
+        if (step.isPresent()) {
+            if (user.getTotpLastStep() != null && step.getAsLong() <= user.getTotpLastStep()) {
+                return false;
+            }
+            user.setTotpLastStep(step.getAsLong());
             return true;
         }
         String normalized = code.trim().toLowerCase();

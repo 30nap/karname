@@ -48,7 +48,9 @@ spring:
 server:
   port: ${KARNAME_PORT:8080}
   shutdown: graceful
-  forward-headers-strategy: framework
+  # Client address and scheme from X-Forwarded-* only when the request comes from a private
+  # network address (the nginx container); anything a client sends directly is ignored.
+  forward-headers-strategy: native
 
 management:
   endpoints:

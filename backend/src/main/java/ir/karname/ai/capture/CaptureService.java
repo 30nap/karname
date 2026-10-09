@@ -57,7 +57,14 @@ public class CaptureService {
     static final int MAX_COMMIT = 100;
     private static final Pattern MESSAGE_SEPARATOR = Pattern.compile("\\n\\s*\\n");
     /** Card or account numbers in an SMS: masked (with *) or long digit runs; amounts have separators. */
-    private static final Pattern IDENTIFIER = Pattern.compile("(?<![\\d,٬])[0-9*xX.\\-]*\\*[0-9*xX.\\-]*\\d{4}(?![\\d,٬])|(?<![\\d,٬./-])\\d{8,}(?![\\d,٬])");
+    /**
+     * A masked card or account number ("***4321", "6219-86**-****-5678", "xxxx1234") or a long
+     * plain one. The prefix before the first mask character cannot contain one and the rest is
+     * bounded, so the match never backtracks across a long run of mask characters (pasted text can
+     * be 20,000 characters).
+     */
+    private static final Pattern IDENTIFIER = Pattern.compile(
+            "(?<![\\d,٬])[0-9.\\-]{0,32}[*xX][0-9*xX.\\-]{0,32}?\\d{4}(?![\\d,٬])|(?<![\\d,٬./-])\\d{8,}+(?![\\d,٬])");
     private static final Map<Bank, String> BANK_NAMES = bankNames();
 
     private final DraftBuilder drafts;
@@ -233,14 +240,7 @@ public class CaptureService {
      */
     static Long accountFor(Context ctx, String message) {
         String text = PersianText.normalizeDigits(message);
-        Set<String> endings = new LinkedHashSet<>();
-        Matcher m = IDENTIFIER.matcher(text);
-        while (m.find()) {
-            String digits = m.group().replaceAll("\\D", "");
-            if (digits.length() >= 4) {
-                endings.add(digits.substring(digits.length() - 4));
-            }
-        }
+        Set<String> endings = numberEndings(text);
         List<Account> byNumber = ctx.accounts().values().stream()
                 .filter(a -> a.getIdentifierHints().stream().map(h -> PersianText.normalizeDigits(h).replaceAll("\\D", ""))
                         .anyMatch(h -> h.length() >= 4 && endings.contains(h.substring(h.length() - 4))))
@@ -254,6 +254,19 @@ public class CaptureService {
                 .filter(a -> Pattern.compile("(^|[^\\p{L}])" + Pattern.quote(BANK_NAMES.get(a.getBank())) + "($|[^\\p{L}])").matcher(normalized).find())
                 .toList();
         return byBank.size() == 1 ? byBank.getFirst().getId() : null;
+    }
+
+    /** The last four digits of each card or account number in {@code text}. */
+    static Set<String> numberEndings(String text) {
+        Set<String> endings = new LinkedHashSet<>();
+        Matcher m = IDENTIFIER.matcher(text);
+        while (m.find()) {
+            String digits = m.group().replaceAll("\\D", "");
+            if (digits.length() >= 4) {
+                endings.add(digits.substring(digits.length() - 4));
+            }
+        }
+        return endings;
     }
 
     // ---------------------------------------------------------------- recording

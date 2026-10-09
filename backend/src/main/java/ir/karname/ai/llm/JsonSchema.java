@@ -1,5 +1,6 @@
 package ir.karname.ai.llm;
 
+import ir.karname.common.Decimals;
 import ir.karname.common.persian.PersianNumbers;
 import ir.karname.common.persian.PersianText;
 import tools.jackson.databind.JsonNode;
@@ -305,6 +306,10 @@ public final class JsonSchema {
                     return;
                 }
                 BigDecimal value = node.decimalValue();
+                if (!Decimals.isReasonable(value)) {
+                    errors.add(path + ": number out of range");
+                    return;
+                }
                 if (minimum != null && value.compareTo(minimum) < 0) {
                     errors.add(path + ": must be at least " + minimum.toPlainString());
                 }

@@ -3,9 +3,11 @@ package ir.karname.ai.tools;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 class CalculatorTest {
 
@@ -44,5 +46,14 @@ class CalculatorTest {
         assertThatThrownBy(() -> Calculator.evaluate("1+".repeat(200) + "1")).hasMessageContaining("characters");
         assertThatThrownBy(() -> Calculator.evaluate("(".repeat(50) + "1" + ")".repeat(50))).hasMessageContaining("nested");
         assertThatThrownBy(() -> Calculator.evaluate("")).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void refusesResultsTooFineToRoundCheaply() {
+        // the scale of powers of powers explodes while the precision stays small
+        assertTimeoutPreemptively(Duration.ofSeconds(2), () ->
+                assertThatThrownBy(() -> Calculator.evaluate("((0.1^1000)^1000)^1000")).hasMessageContaining("too large or too small"));
+        // financial factors well inside the bounds still work
+        assertThat(Calculator.evaluate("(1.02)^-120")).isEqualByComparingTo(new BigDecimal("0.09289223"));
     }
 }

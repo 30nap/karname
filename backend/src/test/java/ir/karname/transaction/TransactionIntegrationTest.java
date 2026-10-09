@@ -7,12 +7,14 @@ import ir.karname.support.TestUser;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -25,6 +27,22 @@ class TransactionIntegrationTest extends FinanceTestSupport {
         body.put("amount", amount);
         body.put("date", date);
         return body;
+    }
+
+    @Test
+    void numbersTooLargeOrTooFineAreRefusedCheaply() throws Exception {
+        TestUser user = createUser("sina");
+        Account bank = bank(user, "ملت", "10000000");
+        // short to write, but rounding them would build numbers with hundreds of millions of digits
+        assertTimeoutPreemptively(Duration.ofSeconds(5), () -> {
+            for (String amount : List.of("1E-100000000", "1e-999999999", "0.000000000000000000000000000000000001")) {
+                mvc.perform(postAs(user, "/api/v1/transactions", tx("EXPENSE", bank.getId(), amount, "2026-10-05")))
+                        .andExpect(status().isBadRequest());
+            }
+            mvc.perform(postAs(user, "/api/v1/prices", Map.of("commodity", "USD", "priceToman", "1E-100000000")))
+                    .andExpect(status().isBadRequest());
+        });
+        mvc.perform(getAs(user, "/api/v1/accounts/{id}", bank.getId())).andExpect(jsonPath("$.balance").value("10000000"));
     }
 
     @Test

@@ -125,9 +125,16 @@ function TwoFactorCard() {
               <FormField label="کد ۶ رقمی برنامه">
                 <Input inputMode="numeric" className="ltr max-w-40 text-center tracking-[0.3em]" value={code} onChange={(e) => setCode(e.target.value)} />
               </FormField>
-              <Button className="w-fit" loading={enable.isPending} onClick={() => {
+              <FormField label="رمز عبور فعلی" hint="برای اطمینان از این‌که خودت هستی.">
+                <Input type="password" autoComplete="current-password" className="max-w-64" value={password}
+                  onChange={(e) => setPassword(e.target.value)} />
+              </FormField>
+              <Button className="w-fit" loading={enable.isPending} disabled={!code.trim() || !password} onClick={() => {
                 setError(null)
-                enable.mutate(toLatinDigits(code), { onSuccess: (r) => setRecovery(r.recoveryCodes), onError: (e) => setError(e.message) })
+                enable.mutate({ code: toLatinDigits(code), password }, {
+                  onSuccess: (r) => { setPassword(''); setRecovery(r.recoveryCodes) },
+                  onError: (e) => setError(e.message),
+                })
               }}>فعال‌سازی</Button>
             </div>
           </div>

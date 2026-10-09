@@ -126,7 +126,8 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
         mvc.perform(patchAs(admin, "/api/v1/admin/users/{id}", Map.of("enabled", false), user.id())).andExpect(status().isOk());
         MvcResult result = login("reza", PASSWORD);
         assertThat(result.getResponse().getStatus()).isEqualTo(401);
-        assertThat(readJson(result.getResponse().getContentAsString()).get("code").asString()).isEqualTo("auth.disabled");
+        // the same answer as a wrong password: it must not confirm that the password was right
+        assertThat(readJson(result.getResponse().getContentAsString()).get("code").asString()).isEqualTo("auth.invalidCredentials");
     }
 
     @Test

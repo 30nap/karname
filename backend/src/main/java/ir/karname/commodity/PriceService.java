@@ -1,5 +1,6 @@
 package ir.karname.commodity;
 
+import ir.karname.common.Decimals;
 import ir.karname.common.web.ApiException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
@@ -176,7 +177,7 @@ public class PriceService {
     /** Records the price implied by an exchange transaction (e.g. a coin bought for 80M Toman). */
     @Transactional
     public void recordImplied(long userId, long commodityId, BigDecimal priceToman, Instant pricedAt, long transactionId) {
-        if (priceToman.signum() > 0 && priceToman.compareTo(MAX_PRICE) < 0) {
+        if (Decimals.isReasonable(priceToman) && priceToman.signum() > 0 && priceToman.compareTo(MAX_PRICE) < 0) {
             prices.save(new Price(commodityId, userId, normalize(priceToman), pricedAt, Price.SOURCE_TRANSACTION, transactionId));
         }
     }
@@ -214,12 +215,15 @@ public class PriceService {
         if (commodity.isToman()) {
             throw ApiException.badRequest("price.tomanFixed");
         }
-        if (priceToman == null || priceToman.signum() <= 0 || priceToman.compareTo(MAX_PRICE) >= 0) {
+        if (priceToman == null || !Decimals.isReasonable(priceToman) || priceToman.signum() <= 0 || priceToman.compareTo(MAX_PRICE) >= 0) {
             throw ApiException.badRequest("price.invalid");
         }
     }
 
     private static BigDecimal normalize(BigDecimal price) {
+        if (!Decimals.isReasonable(price)) {
+            throw ApiException.badRequest("price.invalid");
+        }
         return price.setScale(Math.min(Math.max(price.scale(), 0), 8), RoundingMode.HALF_EVEN);
     }
 }

@@ -17,6 +17,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,7 +41,8 @@ public class BackupService {
     private static final String COMMODITY = "#commodity";
     /** A reference to instance-wide settings (an AI provider): not portable, so restored as empty. */
     private static final String DETACHED = "#detached";
-    private static final int MAX_ROWS = 1_000_000;
+    private static final int MAX_ROWS = 500_000;
+    private static final Pattern CUSTOM_CODE = Pattern.compile("^C_[0-9A-F]{8}$");
 
     /** A user-owned table, in restore order: referenced tables come first. */
     private record Table(String name, String owner, Map<String, String> refs, boolean hasId) {
@@ -143,6 +145,7 @@ public class BackupService {
                 throw ApiException.badRequest("backup.unknownTable", name);
             }
         }
+        checkCustomCodes(backup.tables().get("commodities"));
         deleteUserData(userId);
 
         Map<String, Map<Long, Long>> ids = new HashMap<>();
@@ -171,6 +174,20 @@ public class BackupService {
         }
         restoreSettings(userId, backup.settings());
         return new RestoreSummary(counts);
+    }
+
+    /**
+     * Custom units keep their code, which must look like one ("C_…") and be unique: a custom unit
+     * coded "USD" would shadow the built-in one and break every lookup of it for this user.
+     */
+    private static void checkCustomCodes(List<Map<String, Object>> rows) {
+        Set<String> seen = new HashSet<>();
+        for (Map<String, Object> row : rows == null ? List.<Map<String, Object>>of() : rows) {
+            String code = row == null ? null : String.valueOf(row.get("code"));
+            if (code == null || !CUSTOM_CODE.matcher(code).matches() || !seen.add(code)) {
+                throw ApiException.badRequest("backup.invalidCommodity", String.valueOf(code));
+            }
+        }
     }
 
     private void deleteUserData(long userId) {

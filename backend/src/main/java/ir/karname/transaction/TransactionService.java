@@ -9,6 +9,7 @@ import ir.karname.category.MerchantRuleService;
 import ir.karname.commodity.Commodity;
 import ir.karname.commodity.CommodityRepository;
 import ir.karname.commodity.PriceService;
+import ir.karname.common.Decimals;
 import ir.karname.common.config.KarnameProperties;
 import ir.karname.common.persian.PersianText;
 import ir.karname.common.web.ApiException;
@@ -141,7 +142,7 @@ public class TransactionService {
     public Transaction reconcile(long userId, long accountId, BigDecimal actualBalance, LocalDate date) {
         Account account = accounts.require(userId, accountId);
         LocalDate day = checkDate(date == null ? LocalDate.now(clock) : date);
-        if (actualBalance == null || actualBalance.abs().compareTo(MAX_AMOUNT) >= 0) {
+        if (actualBalance == null || !Decimals.isReasonable(actualBalance) || actualBalance.abs().compareTo(MAX_AMOUNT) >= 0) {
             throw ApiException.badRequest("transaction.invalidAmount");
         }
         BigDecimal target = account.getType().isLiability() ? actualBalance.abs().negate() : actualBalance;
@@ -161,7 +162,7 @@ public class TransactionService {
     }
 
     private Transaction updateBalanceEntry(long userId, Transaction tx, TransactionRequest request) {
-        if (request.amount() == null || request.amount().abs().compareTo(MAX_AMOUNT) >= 0) {
+        if (request.amount() == null || !Decimals.isReasonable(request.amount()) || request.amount().abs().compareTo(MAX_AMOUNT) >= 0) {
             throw ApiException.badRequest("transaction.invalidAmount");
         }
         Account account = accounts.require(userId, tx.getAccountId());
@@ -218,7 +219,7 @@ public class TransactionService {
                     tx.setToAmount(checkAmount(request.toAmount()));
                 }
                 BigDecimal fee = request.fee();
-                if (fee != null && (fee.signum() < 0 || fee.compareTo(MAX_AMOUNT) >= 0)) {
+                if (fee != null && (!Decimals.isReasonable(fee) || fee.signum() < 0 || fee.compareTo(MAX_AMOUNT) >= 0)) {
                     throw ApiException.badRequest("transaction.invalidFee");
                 }
                 tx.setFee(fee == null || fee.signum() == 0 ? null : scaled(fee));
@@ -292,7 +293,7 @@ public class TransactionService {
     }
 
     private static BigDecimal checkAmount(BigDecimal amount) {
-        if (amount == null || amount.signum() <= 0 || amount.compareTo(MAX_AMOUNT) >= 0) {
+        if (amount == null || !Decimals.isReasonable(amount) || amount.signum() <= 0 || amount.compareTo(MAX_AMOUNT) >= 0) {
             throw ApiException.badRequest("transaction.invalidAmount");
         }
         return scaled(amount);

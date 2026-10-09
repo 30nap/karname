@@ -135,7 +135,10 @@ public class PriceFeedService {
     public RunResult test(Long id, SourceRequest request) {
         PriceSource draft = new PriceSource();
         if (id != null) {
-            draft.setHeadersEncrypted(require(id).getHeadersEncrypted());
+            PriceSource stored = require(id);
+            // the stored address too, so a changed one is noticed and the secrets are not lent to it
+            draft.setUrl(stored.getUrl());
+            draft.setHeadersEncrypted(stored.getHeadersEncrypted());
         }
         apply(draft, request);
         try {
@@ -249,7 +252,9 @@ public class PriceFeedService {
             throw ApiException.badRequest("priceSource.invalidInterval");
         }
         List<PriceMapping> mappings = validMappings(r.kind(), r.mappings());
-        Map<String, String> headers = mergedHeaders(source, r.headers());
+        // stored header values (API keys) only ever go to the address they were entered for
+        boolean moved = source.getUrl() != null && (url == null || !source.getUrl().replaceAll("/+$", "").equalsIgnoreCase(url.replaceAll("/+$", "")));
+        Map<String, String> headers = mergedHeaders(source, r.headers(), moved);
 
         source.setName(name);
         source.setKind(r.kind());
@@ -298,7 +303,7 @@ public class PriceFeedService {
     }
 
     /** New header values replace stored ones; a header sent without a value keeps its stored value. */
-    private Map<String, String> mergedHeaders(PriceSource source, List<HeaderInput> input) {
+    private Map<String, String> mergedHeaders(PriceSource source, List<HeaderInput> input, boolean moved) {
         Map<String, String> stored = headers(source);
         Map<String, String> result = new LinkedHashMap<>();
         if (input == null) {
@@ -312,7 +317,11 @@ public class PriceFeedService {
             if (!HEADER_NAME.matcher(name).matches()) {
                 throw ApiException.badRequest("priceSource.invalidHeaders");
             }
-            String value = h.value() == null || h.value().isEmpty() ? stored.get(name) : h.value().trim();
+            boolean kept = h.value() == null || h.value().isEmpty();
+            if (kept && moved && stored.containsKey(name)) {
+                throw ApiException.badRequest("priceSource.headerForNewUrl");
+            }
+            String value = kept ? stored.get(name) : h.value().trim();
             if (value == null || value.length() > 2000 || value.contains("\n") || value.contains("\r")) {
                 throw ApiException.badRequest("priceSource.invalidHeaders");
             }

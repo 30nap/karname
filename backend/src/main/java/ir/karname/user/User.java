@@ -50,6 +50,9 @@ public class User {
     @Column(name = "totp_recovery_codes")
     private String totpRecoveryCodes;
 
+    @Column(name = "totp_last_step")
+    private Long totpLastStep;
+
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
@@ -132,6 +135,14 @@ public class User {
 
     public String getTotpRecoveryCodes() {
         return totpRecoveryCodes;
+    }
+
+    public Long getTotpLastStep() {
+        return totpLastStep;
+    }
+
+    public void setTotpLastStep(Long totpLastStep) {
+        this.totpLastStep = totpLastStep;
     }
 
     public void setTotpRecoveryCodes(String totpRecoveryCodes) {

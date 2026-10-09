@@ -12,6 +12,7 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.OptionalLong;
 
 /** RFC 6238 time-based one-time passwords (SHA-1, 6 digits, 30 s), compatible with authenticator apps. */
 @Service
@@ -41,21 +42,26 @@ public class TotpService {
 
     /** Accepts the current code and one step before/after to tolerate clock drift. */
     public boolean verify(String secret, String code) {
+        return matchingStep(secret, code).isPresent();
+    }
+
+    /** The time step a valid code belongs to (current, previous or next), so it can be used once. */
+    public OptionalLong matchingStep(String secret, String code) {
         if (secret == null || code == null) {
-            return false;
+            return OptionalLong.empty();
         }
         String digits = code.replaceAll("\\s", "");
         if (!digits.matches("\\d{6}")) {
-            return false;
+            return OptionalLong.empty();
         }
         long step = clock.instant().getEpochSecond() / PERIOD_SECONDS;
         byte[] key = base32Decode(secret);
         for (long offset = -1; offset <= 1; offset++) {
             if (code(key, step + offset).equals(digits)) {
-                return true;
+                return OptionalLong.of(step + offset);
             }
         }
-        return false;
+        return OptionalLong.empty();
     }
 
     /** Current code for a secret (used by tests). */

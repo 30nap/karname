@@ -16,6 +16,8 @@ public final class Calculator {
     static final int MAX_LENGTH = 300;
     private static final MathContext MC = MathContext.DECIMAL128;
     private static final int MAX_DEPTH = 40;
+    /** Far beyond any useful answer, yet rounding it for the result stays cheap. */
+    private static final int MAX_SCALE = 1000;
 
     private final String text;
     private int pos;
@@ -41,14 +43,25 @@ public final class Calculator {
         return rounded.scale() < 0 ? rounded.setScale(0) : rounded;
     }
 
+    /**
+     * Precision is capped by {@code MC}, but the scale is not: powers of powers of a small number
+     * reach "1E-1000000000", and rounding that for the answer would build a billion-digit number.
+     */
+    private static BigDecimal checked(BigDecimal value) {
+        if (Math.abs((long) value.scale()) > MAX_SCALE) {
+            throw new IllegalArgumentException("a result is too large or too small to compute");
+        }
+        return value;
+    }
+
     private BigDecimal expression() {
         enter();
         BigDecimal value = term();
         while (true) {
             if (accept('+')) {
-                value = value.add(term(), MC);
+                value = checked(value.add(term(), MC));
             } else if (accept('-')) {
-                value = value.subtract(term(), MC);
+                value = checked(value.subtract(term(), MC));
             } else {
                 depth--;
                 return value;
@@ -60,13 +73,13 @@ public final class Calculator {
         BigDecimal value = power();
         while (true) {
             if (accept('*')) {
-                value = value.multiply(power(), MC);
+                value = checked(value.multiply(power(), MC));
             } else if (accept('/')) {
                 BigDecimal divisor = power();
                 if (divisor.signum() == 0) {
                     throw new IllegalArgumentException("division by zero");
                 }
-                value = value.divide(divisor, MC);
+                value = checked(value.divide(divisor, MC));
             } else {
                 return value;
             }
@@ -86,7 +99,7 @@ public final class Calculator {
             if (n < 0 && base.signum() == 0) {
                 throw new IllegalArgumentException("division by zero");
             }
-            return n >= 0 ? base.pow(n, MC) : BigDecimal.ONE.divide(base.pow(-n, MC), MC);
+            return checked(n >= 0 ? base.pow(n, MC) : BigDecimal.ONE.divide(checked(base.pow(-n, MC)), MC));
         }
         return base;
     }
@@ -103,7 +116,7 @@ public final class Calculator {
         }
         BigDecimal value = primary();
         while (accept('%')) {
-            value = value.movePointLeft(2);
+            value = checked(value.movePointLeft(2));
         }
         return value;
     }

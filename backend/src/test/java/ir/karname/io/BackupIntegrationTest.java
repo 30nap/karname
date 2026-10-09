@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.nio.charset.StandardCharsets;
@@ -183,6 +184,15 @@ class BackupIntegrationTest extends FinanceTestSupport {
         ((ObjectNode) injected.get("tables").get("accounts").get(0)).put("name; DROP TABLE users", "x");
         mvc.perform(restore(user, injected.toString()).param("confirm", "REPLACE"))
                 .andExpect(jsonPath("$.code").value("backup.unknownColumn"));
+
+        // a custom unit posing as a built-in one would break every lookup of the real one
+        ObjectNode shadowing = (ObjectNode) readJson(backup);
+        ObjectNode tables = (ObjectNode) shadowing.get("tables");
+        ArrayNode units = tables.has("commodities") ? (ArrayNode) tables.get("commodities") : tables.putArray("commodities");
+        units.addObject().put("code", "USD").put("name_fa", "دلار تقلبی");
+        mvc.perform(restore(user, shadowing.toString()).param("confirm", "REPLACE"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("backup.invalidCommodity"));
 
         assertThat(fingerprint(user)).isEqualTo(before);
     }
