@@ -1,10 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test'
-import { api, register } from './support'
-
-async function pick(page: Page, field: Locator, option: string) {
-  await field.click()
-  await page.getByRole('option', { name: option, exact: true }).click()
-}
+import { expect, test, type Locator } from '@playwright/test'
+import { api, pick, register } from './support'
 
 test('accounts, income, an expense and a dollar purchase add up', async ({ page }) => {
   await register(page)

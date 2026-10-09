@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
 
 export const PASSWORD = 'secret-pass-123'
 export const ADMIN = 'e2eadmin'
@@ -57,4 +57,22 @@ export async function bankAccount(page: Page, name: string, balance: string): Pr
 export async function expectNoHorizontalOverflow(page: Page): Promise<void> {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
   expect(overflow, `horizontal overflow on ${page.url()}`).toBeLessThanOrEqual(1)
+}
+
+/** Today in Tehran, as the app counts days (YYYY-MM-DD). */
+export function todayIso(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tehran' })
+}
+
+/** Picks an option of a select field. */
+export async function pick(page: Page, field: Locator, option: string | RegExp): Promise<void> {
+  await field.click()
+  await page.getByRole('option', { name: option, exact: typeof option === 'string' }).click()
+}
+
+export async function categoryId(page: Page, name: string): Promise<number> {
+  const categories = await api(page)<{ id: number; name: string }[]>('GET', '/categories')
+  const category = categories.find((c) => c.name === name)
+  if (!category) throw new Error('no category ' + name)
+  return category.id
 }

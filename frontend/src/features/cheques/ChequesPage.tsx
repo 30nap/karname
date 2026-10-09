@@ -21,7 +21,7 @@ import { ROW, ROW_ACTIONS, ROW_AMOUNT, ROW_DETAILS, ROW_ICON } from '@/component
 import { AccountSelect } from '@/components/finance/selects'
 import { useFormat } from '@/app/preferences'
 import { useAccounts } from '@/features/accounts/api'
-import { isTomanAsset } from '@/lib/accounts'
+import { everydayAccount, isTomanAsset } from '@/lib/accounts'
 import { ApiError } from '@/lib/api/client'
 import type { Cheque, ChequeDirection, ChequeStatus } from '@/lib/api/types'
 import { cn } from '@/lib/cn'
@@ -60,7 +60,10 @@ function ClearDialog({ cheque, onClose }: { cheque: Cheque; onClose: () => void 
   const status = useChequeStatus()
   const today = todayIso()
   const issued = cheque.direction === 'ISSUED'
-  const [accountId, setAccountId] = useState<number | null>(cheque.accountId)
+  const { data: accounts = [] } = useAccounts()
+  // the cheque's own account, else the everyday one, until the user picks
+  const [choice, setAccountId] = useState<number | null | undefined>(cheque.accountId ?? undefined)
+  const accountId = choice === undefined ? everydayAccount(accounts)?.id ?? null : choice
   const [date, setDate] = useState(today)
   const [error, setError] = useState<string | null>(null)
 
