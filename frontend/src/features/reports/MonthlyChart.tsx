@@ -10,6 +10,7 @@ import { useFormat } from '@/app/preferences'
 import type { MonthTotals } from '@/lib/api/types'
 import { IRT, toDisplayAmount, unitLabel } from '@/lib/format/money'
 import { JALALI_MONTHS, parseMonthKey } from '@/lib/jalali'
+import { fromFirstData } from '@/lib/series'
 import { useMonthlyReport } from './api'
 
 const INCOME = chartColor(1)
@@ -59,7 +60,7 @@ export function MonthlyChart({ months = 12 }: { months?: number }) {
   const f = useFormat()
   const { data, isPending } = useMonthlyReport(months)
   const [view, setView] = useState<ChartView>('chart')
-  const rows = useMemo(() => data ?? [], [data])
+  const rows = useMemo(() => fromFirstData(data ?? [], (r) => Number(r.incomeToman) !== 0 || Number(r.expenseToman) !== 0), [data])
   const plot = useMemo(
     () => rows.map((r) => ({
       ...r,
@@ -68,7 +69,7 @@ export function MonthlyChart({ months = 12 }: { months?: number }) {
     })),
     [rows, f.prefs],
   )
-  const empty = rows.every((r) => Number(r.incomeToman) === 0 && Number(r.expenseToman) === 0)
+  const empty = rows.length === 0
   const monthName = (key: string) => JALALI_MONTHS[parseMonthKey(key).month - 1]
 
   return (

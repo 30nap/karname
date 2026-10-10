@@ -249,6 +249,8 @@ public class GoalService {
         GoalView view(Goal goal) {
             Commodity unit = commodityMap.get(goal.getCommodityId());
             int scale = unit.isToman() ? 0 : unit.getScale();
+            // paces keep two decimals in units counted whole: a fifth of a coin a month is neither 0 nor 1
+            int rateScale = unit.isToman() ? 0 : Math.max(scale, 2);
             Optional<BigDecimal> unitPrice = price(unit.getId(), now);
             boolean linked = !goal.getAccountIds().isEmpty();
 
@@ -301,7 +303,8 @@ public class GoalService {
                 } else if (passed) {
                     onTrack = false;
                 } else if (remaining != null) {
-                    required = remaining.divide(BigDecimal.valueOf(GoalProjection.paceMonths(current, targetMonth)), scale, RoundingMode.CEILING);
+                    required = remaining.divide(BigDecimal.valueOf(GoalProjection.paceMonths(current, targetMonth)), rateScale,
+                            RoundingMode.CEILING);
                     BigDecimal req = required;
                     requiredToman = unitPrice.map(p -> round0(req.multiply(p))).orElse(null);
                     if (trend != null) {
@@ -311,7 +314,7 @@ public class GoalService {
             }
             return new GoalView(goal.getId(), goal.getName(), goal.getIcon(), target, unit.getCode(), goal.getTargetDate(),
                     List.copyOf(goal.getAccountIds()), goal.getManualAmount(), goal.getNotes(), goal.isArchived(), currentAmount,
-                    currentToman, progress, remaining, achieved, trend == null ? null : trend.setScale(scale, RoundingMode.HALF_EVEN),
+                    currentToman, progress, remaining, achieved, trend == null ? null : trend.setScale(rateScale, RoundingMode.HALF_EVEN),
                     etaMonth, achieved ? Integer.valueOf(0) : monthsToGoal, monthsLeft, required, requiredToman, onTrack, missing);
         }
 

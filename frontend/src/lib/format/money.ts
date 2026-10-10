@@ -44,13 +44,15 @@ export interface FormatMoneyOptions {
   withUnit?: boolean
   signDisplay?: Intl.NumberFormatOptions['signDisplay']
   compact?: boolean
+  /** A rate per month: units counted whole (coins, shares) get two decimals, so 0.17 coins a month is not shown as 0. */
+  rate?: boolean
 }
 
 export function formatMoney(amount: string | null | undefined, commodity: CommodityDisplay, prefs: MoneyPrefs,
   options: FormatMoneyOptions = {}): string {
   if (amount === null || amount === undefined || amount === '') return '—'
   const display = toDisplayAmount(amount, commodity.code, prefs)
-  const scale = commodity.code === 'IRT' ? 0 : commodity.scale
+  const scale = commodity.code === 'IRT' ? 0 : options.rate ? Math.max(commodity.scale, 2) : commodity.scale
   const text = options.compact
     ? formatCompact(display, prefs.digits)
     : formatNumber(display, { digits: prefs.digits, maxFraction: scale, signDisplay: options.signDisplay })

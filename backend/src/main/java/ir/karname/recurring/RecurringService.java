@@ -101,7 +101,11 @@ public class RecurringService {
     @Transactional(readOnly = true)
     public List<RuleView> list(long userId) {
         LocalDate today = LocalDate.now(clock);
-        return rules.findByUserIdOrderByIdAsc(userId).stream().map(r -> view(userId, r, today)).toList();
+        return rules.findByUserIdOrderByIdAsc(userId).stream().map(r -> view(userId, r, today))
+                // what comes next first: active rules by their next date, then paused ones, then those that ended
+                .sorted(Comparator.comparing((RuleView r) -> !r.active())
+                        .thenComparing(RuleView::nextDate, Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
     }
 
     @Transactional(readOnly = true)

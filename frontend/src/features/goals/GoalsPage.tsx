@@ -51,6 +51,7 @@ function GoalCard({ goal, onEdit, onDelete }: { goal: Goal; onEdit: () => void; 
   const unit = commodities.get(goal.commodity)
   const progress = goal.progress === null ? null : Number(goal.progress)
   const money = (value: string | null) => <Amount value={value} commodity={goal.commodity} />
+  const perMonth = (value: string | null) => <Amount value={value} commodity={goal.commodity} rate />
   return (
     <Card className={cn(goal.archived && 'opacity-60')}>
       <CardContent className="grid gap-3 p-4 sm:p-5">
@@ -113,7 +114,7 @@ function GoalCard({ goal, onEdit, onDelete }: { goal: Goal; onEdit: () => void; 
             <li className="flex items-center gap-1.5">
               <Target className="size-4 shrink-0 text-muted-foreground" aria-hidden />
               <span>
-                پس‌انداز لازم: ماهی {money(goal.requiredPerMonth)}
+                پس‌انداز لازم: ماهی {perMonth(goal.requiredPerMonth)}
                 {goal.commodity !== 'IRT' && goal.requiredPerMonthToman ? <span className="text-muted-foreground"> (≈ <Amount value={goal.requiredPerMonthToman} compact />)</span> : null}
               </span>
             </li>
@@ -122,7 +123,7 @@ function GoalCard({ goal, onEdit, onDelete }: { goal: Goal; onEdit: () => void; 
             <li className="flex items-center gap-1.5">
               <TrendingUp className="size-4 shrink-0 text-muted-foreground" aria-hidden />
               <span>
-                روند ۶ ماه اخیر: ماهی <Amount value={goal.monthlyChange} commodity={goal.commodity} sign={Number(goal.monthlyChange) >= 0 ? '+' : undefined} />
+                روند ۶ ماه اخیر: ماهی <Amount value={goal.monthlyChange} commodity={goal.commodity} rate sign={Number(goal.monthlyChange) >= 0 ? '+' : undefined} />
                 {goal.etaMonth && goal.monthsToGoal !== null ? (
                   <span className="text-muted-foreground"> | با این روند: {f.month(goal.etaMonth)} ({formatMonths(goal.monthsToGoal, f.prefs.digits)} دیگر)</span>
                 ) : Number(goal.monthlyChange) <= 0 ? (

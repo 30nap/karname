@@ -3,6 +3,7 @@ import { formatCompact, formatNumber } from './number'
 
 const IRT = { code: 'IRT', unitFa: 'تومان', scale: 0 }
 const BTC = { code: 'BTC', unitFa: 'بیت‌کوین', scale: 8 }
+const COIN = { code: 'COIN_EMAMI', unitFa: 'سکه', scale: 0 }
 const persianToman = { digits: 'PERSIAN', displayUnit: 'TOMAN' } as const
 const latinRial = { digits: 'LATIN', displayUnit: 'RIAL' } as const
 
@@ -38,6 +39,13 @@ describe('money formatting', () => {
     expect(formatMoney('-470000', IRT, persianToman)).toBe('\u200e−۴۷۰٬۰۰۰ تومان')
     expect(formatMoney('-470000', IRT, { digits: 'LATIN', displayUnit: 'TOMAN' })).toBe('\u200e-470,000 تومان')
     expect(formatMoney('45', IRT, persianToman, { signDisplay: 'always' })).toBe('\u200e+۴۵ تومان')
+  })
+
+  it('shows a monthly rate of whole units with two decimals', () => {
+    expect(formatMoney('0.16666667', COIN, persianToman)).toBe('۰ سکه')
+    expect(formatMoney('0.16666667', COIN, persianToman, { rate: true })).toBe('۰٫۱۷ سکه')
+    expect(formatMoney('3', COIN, persianToman, { rate: true })).toBe('۳ سکه')
+    expect(formatMoney('180000.4', IRT, persianToman, { rate: true })).toBe('۱۸۰٬۰۰۰ تومان')
   })
 
   it('handles missing amounts', () => {

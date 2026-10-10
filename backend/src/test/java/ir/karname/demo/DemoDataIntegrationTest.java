@@ -49,7 +49,12 @@ class DemoDataIntegrationTest extends AbstractIntegrationTest {
         assertThat(loan.path("overdueCount").asInt()).isZero();
 
         assertThat(get(user, "/api/v1/budgets").path("items")).hasSize(4);
-        assertThat(get(user, "/api/v1/goals")).hasSize(2);
+        JsonNode goals = get(user, "/api/v1/goals");
+        assertThat(goals).hasSize(2);
+        for (JsonNode goal : goals) {
+            // every goal can be measured: its unit has a price (the migration fund is in euros, which no account holds)
+            assertThat(goal.path("progress").isNull()).as(goal.path("name").asString() + " progress").isFalse();
+        }
         assertThat(get(user, "/api/v1/cheques")).hasSize(2);
         assertThat(get(user, "/api/v1/recurring")).hasSize(3);
         assertThat(get(user, "/api/v1/transactions?uncategorized=true&type=EXPENSE&size=50").path("items")).hasSize(3);

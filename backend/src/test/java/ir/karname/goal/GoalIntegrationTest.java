@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -57,6 +58,24 @@ class GoalIntegrationTest extends FinanceTestSupport {
                 .andExpect(jsonPath("$.onTrack").value(false))
                 .andExpect(jsonPath("$.achieved").value(false))
                 .andExpect(jsonPath("$.missingPrices").value(false));
+    }
+
+    @Test
+    void paceOfAGoalInWholeCoinsKeepsFractions() throws Exception {
+        TestUser user = createUser("sina");
+        globalPrice("COIN_EMAMI", "80000000", Instant.parse("2026-03-01T06:00:00Z"));
+        Account coins = account(user, "سکه", AccountType.GOLD, "COIN_EMAMI", "2");
+        income(user, coins, "1", LocalDate.of(2026, 7, 5), null, "هدیه");
+        Map<String, Object> body = goal("ده سکه", "10", "COIN_EMAMI", List.of(coins.getId()));
+        body.put("targetDate", "2029-09-21");
+
+        // one coin in six months and seven to go in three years: fractions of a coin a month, not 0 or 1
+        mvc.perform(postAs(user, "/api/v1/goals", body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.currentAmount").value("3"))
+                .andExpect(jsonPath("$.remaining").value("7"))
+                .andExpect(jsonPath("$.monthlyChange").value(matchesPattern("0\\.\\d{1,2}")))
+                .andExpect(jsonPath("$.requiredPerMonth").value(matchesPattern("0\\.\\d{1,2}")));
     }
 
     @Test

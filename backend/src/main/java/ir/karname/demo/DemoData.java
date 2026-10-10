@@ -226,6 +226,8 @@ public class DemoData {
         }
 
         private void goals(Account usd, Account usdt, Account coin) {
+            // no account holds euros, but the migration goal is counted in them
+            recordPrices(commodities.require(userId, "EUR"));
             goals.create(userId, new GoalRequest("صندوق مهاجرت", null, new BigDecimal("15000"), "EUR", today.plusYears(2),
                     List.of(usd.getId(), usdt.getId()), null, "هزینه‌ی ویزا، بلیت و شش ماه اول زندگی", null));
             goals.create(userId, new GoalRequest("ده سکه برای آینده", null, BigDecimal.TEN, "COIN_EMAMI", null, List.of(coin.getId()),

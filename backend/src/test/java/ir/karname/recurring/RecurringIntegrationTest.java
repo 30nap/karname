@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.LocalDate;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -68,6 +69,29 @@ class RecurringIntegrationTest extends FinanceTestSupport {
         mvc.perform(getAs(user, "/api/v1/recurring/{id}", id))
                 .andExpect(jsonPath("$.lastPosted").value("2026-12-22"))
                 .andExpect(jsonPath("$.nextDate").value("2027-01-21"));
+    }
+
+    @Test
+    void listsWhatComesNextFirst() throws Exception {
+        TestUser user = createUser("sina");
+        Account bank = bank(user, "ملت", "1000000");
+        Map<String, Object> rent = rule("اجاره", "EXPENSE", bank, "18000000", "REMIND");
+        rent.put("dayOfMonth", 20);
+        // due before the others, but paused
+        Map<String, Object> gym = rule("باشگاه", "EXPENSE", bank, "900000", "REMIND");
+        gym.put("dayOfMonth", 15);
+        gym.put("active", false);
+        Map<String, Object> internet = rule("اینترنت", "EXPENSE", bank, "590000", "AUTO");
+        internet.put("dayOfMonth", 16);
+        for (Map<String, Object> body : List.of(rent, gym, internet)) {
+            body.put("startDate", "2026-10-06");
+            create(user, body);
+        }
+
+        mvc.perform(getAs(user, "/api/v1/recurring"))
+                .andExpect(jsonPath("$[0].name").value("اینترنت"))
+                .andExpect(jsonPath("$[1].name").value("اجاره"))
+                .andExpect(jsonPath("$[2].name").value("باشگاه"));
     }
 
     @Test

@@ -10,6 +10,7 @@ import { useCommodityMap } from '@/features/commodities/api'
 import { useNetWorthHistory } from '@/features/transactions/api'
 import { toDisplayAmount } from '@/lib/format/money'
 import { JALALI_MONTHS, parseMonthKey } from '@/lib/jalali'
+import { fromFirstData } from '@/lib/series'
 
 /** Short names for the measure switch; it must fit beside the card title. */
 const MEASURE_LABELS: Record<string, string> = {
@@ -42,7 +43,7 @@ export function NetWorthTrend({ months = 12, chartHeight = 'h-56' }: { months?: 
 
   const rows: Row[] = useMemo(
     () =>
-      (data ?? []).map((p) => {
+      fromFirstData(data ?? [], (p) => Number(p.totalToman) !== 0).map((p) => {
         const value = active === 'IRT' ? p.totalToman : (p.alternatives[active] ?? null)
         return { month: p.month, value, plot: value === null ? null : Number(toDisplayAmount(value, active, f.prefs)) }
       }),
@@ -116,7 +117,8 @@ export function NetWorthTrend({ months = 12, chartHeight = 'h-56' }: { months?: 
                   strokeWidth={2}
                   fill="url(#netWorthFill)"
                   connectNulls={false}
-                  dot={false}
+                  // a line needs two months; until then the points themselves are drawn
+                  dot={rows.length < 3 ? { r: 3, fill: chartColor(1), strokeWidth: 0 } : false}
                   activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--color-card)', fill: chartColor(1) }}
                   isAnimationActive={false}
                 />

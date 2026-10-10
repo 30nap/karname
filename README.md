@@ -10,6 +10,16 @@ gram, Emami coins, Tether — values all of it in Toman, dollars or grams of gol
 loans, cheques and recurring payments. The AI never does the arithmetic: every figure comes from
 the app's own calculations, and the assistant only drafts transactions for you to confirm.
 
+<p>
+  <img src="docs/screenshots/dashboard.png" alt="Dashboard: net worth with its breakdown and trend, this month's income, expenses and savings, budgets and goals" width="74%">
+  <img src="docs/screenshots/phone-dark.png" alt="The dashboard on a phone in dark mode" width="24%">
+</p>
+<p>
+  <img src="docs/screenshots/assistant.png" alt="The assistant answering where the money went this month, with figures from the app's own totals" width="74%">
+</p>
+
+The screenshots show the built-in demo data (`KARNAME_DEMO`) and the offline scripted model.
+
 ## Features
 
 **Money and assets**
@@ -75,7 +85,8 @@ the administrator can close registration in **تنظیمات → مدیریت**.
 To try it with sample data first, set `KARNAME_DEMO=true` (and `KARNAME_AI_FAKE=true` for an offline
 scripted assistant) in `.env`: a user named `demo` with six months of transactions is created and
 its password is printed in the backend log (`docker compose logs backend`), unless you set
-`KARNAME_DEMO_PASSWORD`.
+`KARNAME_DEMO_PASSWORD`. On an empty database the demo user is the first account, and so the
+administrator ([docs/deployment.md](docs/deployment.md#demo-instance) explains how to share a demo).
 
 For HTTPS, backups, local AI models and upgrades, see [docs/deployment.md](docs/deployment.md).
 

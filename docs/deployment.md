@@ -99,6 +99,11 @@ KARNAME_AI_FAKE=true
 On first start a `demo` user gets six months of sample data, dated relative to today, and the
 offline scripted model answers every AI task. Never enable `KARNAME_AI_FAKE` on a real instance.
 
+On an empty database the demo user is the first account and therefore the administrator. Anyone
+with its password can then change the instance's settings, and the account's own password and
+data. To share a demo with others, start once without `KARNAME_DEMO`, create your own
+administrator, then enable the demo: the demo user is then an ordinary user.
+
 ## Behind the scenes
 
 - **Images**: the backend image is built with Gradle on JDK 25 and runs on a JRE as an
