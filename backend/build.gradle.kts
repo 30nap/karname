@@ -100,3 +100,20 @@ tasks.jacocoTestReport {
         html.required = true
     }
 }
+
+// The build fails when tests cover less than 80% of the lines (the plan's floor; it was 86% when set).
+tasks.jacocoTestCoverageVerification {
+    dependsOn(tasks.test)
+    violationRules {
+        rule {
+            limit {
+                counter = "LINE"
+                minimum = "0.80".toBigDecimal()
+            }
+        }
+    }
+}
+
+tasks.check {
+    dependsOn(tasks.jacocoTestCoverageVerification)
+}

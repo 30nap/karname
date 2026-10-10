@@ -146,6 +146,8 @@ Tests:
 ```bash
 cd backend && ./gradlew test        # unit and integration tests on PostgreSQL (Testcontainers,
                                     # or an existing database in KARNAME_TEST_DB_URL)
+cd backend && ./gradlew check       # the same, failing below 80% line coverage (report in
+                                    # build/reports/jacoco)
 cd frontend && pnpm lint && pnpm typecheck && pnpm test && pnpm build
 cd frontend && pnpm e2e             # Playwright against the real backend; needs an empty
                                     # database karname_e2e (see playwright.config.ts)
