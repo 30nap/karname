@@ -22,7 +22,7 @@ test('an automatic source reads prices in Rial from an outside API', async ({ pa
   })
   await page.reload()
   await page.getByRole('button', { name: `دریافت حالا از ${name}` }).click()
-  await expect(page.getByText('۱ قیمت دریافت شد.')).toBeVisible()
+  await expect(page.getByText(/^۱ قیمت دریافت/)).toBeVisible()
 
   // 1,025,000 Rial = 102,500 Toman, as this source's quote (which source's quote is in use depends on the others)
   await page.reload()

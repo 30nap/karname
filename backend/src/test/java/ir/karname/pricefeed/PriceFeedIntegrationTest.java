@@ -33,6 +33,7 @@ class PriceFeedIntegrationTest extends FinanceTestSupport {
     private static String base;
     private static final List<String> requests = new CopyOnWriteArrayList<>();
     private static volatile String usdtRial = "1040000";
+    private static volatile boolean coinsDown;
 
     @Autowired
     private PriceFeedService feeds;
@@ -45,6 +46,11 @@ class PriceFeedIntegrationTest extends FinanceTestSupport {
             // like Nobitex: one unknown symbol and the whole request is refused
             if (exchange.getRequestURI().getQuery().contains("xyz")) {
                 respond(exchange, 400, "{\"status\": \"failed\", \"code\": \"InvalidSrcCurrency\", \"message\": \"Invalid srcCurrency\"}");
+                return;
+            }
+            // and a rate limit once asked too often ("zzz" plays the request that hits it)
+            if (exchange.getRequestURI().getQuery().contains("zzz")) {
+                respond(exchange, 429, "{\"status\": \"failed\", \"code\": \"TooManyRequests\", \"message\": \"Too many requests\", \"backOff\": 60}");
                 return;
             }
             respond(exchange, 200, """
@@ -76,6 +82,14 @@ class PriceFeedIntegrationTest extends FinanceTestSupport {
             respond(exchange, 200, "[{\"symbol\": \"EUR\", \"price\": 120000}, {\"symbol\": \"USD\", \"price\": 104500}]");
         });
         server.createContext("/html", exchange -> respond(exchange, 200, "<html>maintenance</html>"));
+        // the Emami coin from a good source and from one that quotes thousands of Toman as Toman
+        server.createContext("/coins-good.json", exchange -> respond(exchange, coinsDown ? 503 : 200, coinsDown ? "down" : "{\"coin\": \"209000000\"}"));
+        server.createContext("/coins-wrong.json", exchange -> respond(exchange, 200, "{\"coin\": \"209000000000\"}"));
+        server.createContext("/fx-error.json", exchange -> respond(exchange, 200, "{\"success\": false, \"message\": \"API key expired\"}"));
+        server.createContext("/echo-auth", exchange -> {
+            String auth = exchange.getRequestHeaders().getFirst("Authorization");
+            respond(exchange, 401, "{\"message\": \"Invalid token " + (auth == null ? "" : auth.replaceFirst("^Bearer ", "")) + "\"}");
+        });
         server.start();
         base = "http://127.0.0.1:" + server.getAddress().getPort();
     }
@@ -469,5 +483,192 @@ class PriceFeedIntegrationTest extends FinanceTestSupport {
                 .andExpect(jsonPath("$[0].enabled").value(false))
                 .andExpect(jsonPath("$[0].mappings.length()").value(4))
                 .andExpect(jsonPath("$[0].mappings[3].path").value("gram"));
+    }
+
+    private static Map<String, Object> coin(String name, String path) {
+        Map<String, Object> body = dollar(name, path, "/coin", "TOMAN");
+        body.put("mappings", List.of(Map.of("commodity", "COIN_EMAMI", "path", "/coin")));
+        return body;
+    }
+
+    private String lastError(TestUser admin, long id) throws Exception {
+        String json = mvc.perform(getAs(admin, "/api/v1/admin/price-sources")).andReturn().getResponse().getContentAsString();
+        for (JsonNode source : readJson(json)) {
+            if (source.get("id").asLong() == id) {
+                return source.get("lastError").isNull() ? null : source.get("lastError").asString();
+            }
+        }
+        throw new AssertionError("no source " + id);
+    }
+
+    @Test
+    void aWrongBackupCannotReplaceAGoodPriceWhileThePreferredSourceIsDown() throws Exception {
+        TestUser admin = createUser("admin");
+        long good = create(admin, coin("خوب", "/coins-good.json"));
+        long wrong = create(admin, coin("هزار برابر", "/coins-wrong.json"));
+        assertThat(feeds.runDue()).isEqualTo(2);
+        assertThat(latest(admin, "COIN_EMAMI")).isEqualTo("209000000@خوب");
+        assertThat(lastError(admin, wrong)).contains("اختلاف");
+
+        // the good source is down past its freshness; the scheduled runs leave the wrong price out
+        coinsDown = true;
+        try {
+            clock.advance(Duration.ofMinutes(66));
+            assertThat(feeds.runDue()).isEqualTo(2);
+        } finally {
+            coinsDown = false;
+        }
+        assertThat(latest(admin, "COIN_EMAMI")).isEqualTo("209000000@خوب");
+        assertThat(lastError(admin, wrong)).contains("ثبت نشد");
+        mvc.perform(getAs(admin, "/api/v1/admin/price-sources/coverage"))
+                .andExpect(jsonPath("$[?(@.commodity == 'COIN_EMAMI')].quotes[0].status").value("STALE"))
+                .andExpect(jsonPath("$[?(@.commodity == 'COIN_EMAMI')].quotes[1].status").value("HELD"))
+                .andExpect(jsonPath("$[?(@.commodity == 'COIN_EMAMI')].recordedSource").value("خوب"));
+
+        // back again, the good source is in use, as the reference was never the wrong price
+        clock.advance(Duration.ofMinutes(31));
+        feeds.runDue();
+        assertThat(latest(admin, "COIN_EMAMI")).isEqualTo("209000000@خوب");
+        mvc.perform(getAs(admin, "/api/v1/admin/price-sources/coverage"))
+                .andExpect(jsonPath("$[?(@.commodity == 'COIN_EMAMI')].quotes[0].status").value("CHOSEN"));
+
+        // while the good source is fresh, fetching the other by hand changes nothing
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources/{id}/run", Map.of(), wrong)).andExpect(jsonPath("$.recorded").value(0));
+        // with nothing to confirm or contradict it, the admin fetching it by hand confirms the jump
+        coinsDown = true;
+        try {
+            clock.advance(Duration.ofMinutes(66));
+            feeds.runDue();
+            mvc.perform(postAs(admin, "/api/v1/admin/price-sources/{id}/run", Map.of(), wrong)).andExpect(jsonPath("$.recorded").value(1));
+        } finally {
+            coinsDown = false;
+        }
+        assertThat(latest(admin, "COIN_EMAMI")).isEqualTo("209000000000@هزار برابر");
+    }
+
+    @Test
+    void aSourceThatTakesOverWithAnEarlierQuoteIsRecordedAtOnce() throws Exception {
+        TestUser admin = createUser("admin");
+        long rial = create(admin, dollar("ریالی", "/fx-rial.json", "/usd", "RIAL"));
+        long toman = create(admin, dollar("تومانی", "/fx-toman.json", "/usd", "TOMAN"));
+        feeds.run(toman);
+        clock.advance(Duration.ofMinutes(5));
+        feeds.run(rial);
+        assertThat(latest(admin, "USD")).isEqualTo("105000@ریالی");
+        mvc.perform(putAs(admin, "/api/v1/admin/price-sources/order", Map.of("ids", List.of(toman, rial,
+                jdbc.sql("SELECT id FROM price_sources WHERE name = 'نوبیتکس'").query(Long.class).single())))).andExpect(status().isOk());
+        // the other source runs next: the newly preferred quote, fetched before the last recorded price, is recorded now
+        clock.advance(Duration.ofMinutes(5));
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources/{id}/run", Map.of(), rial)).andExpect(jsonPath("$.recorded").value(1));
+        assertThat(latest(admin, "USD")).isEqualTo("103900@تومانی");
+        assertThat(jdbc.sql("SELECT max(priced_at) FROM prices WHERE source = 'تومانی'").query(java.sql.Timestamp.class).single().toInstant())
+                .isEqualTo(clock.instant());
+    }
+
+    @Test
+    void anEditedSourceNoLongerStandsForWhatItStoppedPublishing() throws Exception {
+        TestUser admin = createUser("admin");
+        long keyed = create(admin, keyed("k3y+1"));
+        long toman = create(admin, dollar("تومانی", "/fx-toman.json", "/usd", "TOMAN"));
+        feeds.run(keyed);
+        feeds.run(toman);
+        assertThat(latest(admin, "USD")).isEqualTo("104500@کلیددار");
+        // the preferred source now publishes the euro only: its dollar quote goes, and the other takes over at once
+        Map<String, Object> euro = keyed(null);
+        euro.put("mappings", List.of(Map.of("commodity", "EUR", "path", "/[symbol=EUR]/price")));
+        mvc.perform(putAs(admin, "/api/v1/admin/price-sources/{id}", euro, keyed)).andExpect(status().isOk());
+        clock.advance(Duration.ofMinutes(1));
+        feeds.run(toman);
+        assertThat(latest(admin, "USD")).isEqualTo("103900@تومانی");
+        mvc.perform(getAs(admin, "/api/v1/admin/price-sources/coverage"))
+                .andExpect(jsonPath("$[?(@.commodity == 'USD')].quotes.length()").value(1));
+        // a longer interval does not make an old quote fresh again
+        assertThat(jdbc.sql("SELECT count(*) FROM price_quotes WHERE source_id = ? AND fresh_until > fetched_at").param(toman)
+                .query(Long.class).single()).isEqualTo(1);
+    }
+
+    @Test
+    void errorsNeverCarryTheCredentialAndOddAnswersAreExplained() throws Exception {
+        TestUser admin = createUser("admin");
+        // the service echoes the token it was given
+        Map<String, Object> echo = dollar("پژواک", "/echo-auth", "/usd", "TOMAN");
+        echo.put("headers", List.of(Map.of("name", "Authorization", "value", "Bearer abc123token")));
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources/test", echo))
+                .andExpect(jsonPath("$.error").value("سرویس با کد HTTP ۴۰۱ پاسخ داد: Invalid token •••"));
+
+        // an error answered with 200: the service's own reason, not a list of missing paths
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources/test", dollar("خطادار", "/fx-error.json", "/usd", "TOMAN")))
+                .andExpect(jsonPath("$.error").value("هیچ‌کدام از مسیرها در پاسخ نبود؛ شاید سرویس خطا داده یا قالب پاسخ عوض شده است: API key expired"));
+
+        // a price that cannot be recorded is an error of its mapping, not of the whole run
+        Map<String, Object> huge = dollar("بزرگ", "/fx-rial.json", "/usd", "TOMAN");
+        huge.put("mappings", List.of(Map.of("commodity", "USD", "path", "/usd", "multiplier", "1000000000")));
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources/test", huge))
+                .andExpect(jsonPath("$.error").doesNotExist())
+                .andExpect(jsonPath("$.results[0].error").value(org.hamcrest.Matchers.containsString("پذیرفتنی نیست")));
+
+        // a key copied with invisible marks and Persian digits is cleaned
+        long id = create(admin, keyed("\u200Ek۳y+1\u200F "));
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources/{id}/run", Map.of(), id)).andExpect(jsonPath("$.recorded").value(1));
+    }
+
+    @Test
+    void nobitexKeepsWhatArrivedWhenARateLimitStopsTheRetries() throws Exception {
+        TestUser admin = createUser("admin");
+        Map<String, Object> body = nobitex(true);
+        body.put("mappings", List.of(Map.of("commodity", "USDT", "path", "usdt"), Map.of("commodity", "TON", "path", "xyz"),
+                Map.of("commodity", "BTC", "path", "zzz"), Map.of("commodity", "ETH", "path", "eth")));
+        requests.clear();
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources/test", body))
+                .andExpect(jsonPath("$.error").doesNotExist())
+                .andExpect(jsonPath("$.results[0].priceToman").value("104000"))
+                .andExpect(jsonPath("$.results[1].error").value(org.hamcrest.Matchers.startsWith("نوبیتکس نماد xyz را نپذیرفت")))
+                .andExpect(jsonPath("$.results[2].error").value("سرویس با کد HTTP ۴۲۹ پاسخ داد: Too many requests"))
+                .andExpect(jsonPath("$.results[3].error").value("سرویس با کد HTTP ۴۲۹ پاسخ داد: Too many requests"));
+        // nothing asked after the limit
+        assertThat(requests).hasSize(4);
+
+        // the limit before anything arrived is the source's error
+        body.put("mappings", List.of(Map.of("commodity", "BTC", "path", "zzz"), Map.of("commodity", "TON", "path", "xyz")));
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources/test", body))
+                .andExpect(jsonPath("$.error").value("سرویس با کد HTTP ۴۲۹ پاسخ داد: Too many requests"));
+    }
+
+    @Test
+    void addressesKeysAndHeadersThatCouldMisdirectARequestAreRefused() throws Exception {
+        TestUser admin = createUser("admin");
+        // the key may not pick the host
+        Map<String, Object> body = keyed("254");
+        body.put("url", "http://169.254.169.{key}/latest/meta-data/");
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources", body)).andExpect(jsonPath("$.code").value("priceSource.invalidUrl"));
+        body.put("url", "http://{key}/computeMetadata/v1/");
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources", body)).andExpect(jsonPath("$.code").value("priceSource.invalidUrl"));
+        // headers the HTTP client sets itself, and values it cannot send
+        body = goldApi();
+        body.put("headers", List.of(Map.of("name", "Host", "value", "example.com")));
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources", body)).andExpect(jsonPath("$.code").value("priceSource.invalidHeaders"));
+        body.put("headers", List.of(Map.of("name", "X-Api-Key", "value", "کلید")));
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources", body)).andExpect(jsonPath("$.code").value("priceSource.invalidHeaders"));
+        // names that would pass for hand-entered prices
+        body = goldApi();
+        body.put("name", "manual");
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources", body)).andExpect(jsonPath("$.code").value("priceSource.invalidName"));
+
+        // Nobitex without an address reads its default one: its stored secrets do not follow it elsewhere
+        Map<String, Object> nobitex = nobitex(true);
+        nobitex.remove("url");
+        nobitex.put("headers", List.of(Map.of("name", "Authorization", "value", "Token {key}")));
+        nobitex.put("apiKey", "s3cr3t-token");
+        long id = create(admin, nobitex);
+        Map<String, Object> elsewhere = dollar("نوبیتکس", "/fx-toman.json", "/usd", "TOMAN");
+        elsewhere.put("url", "https://collector.example/x");
+        elsewhere.put("headers", List.of(new HashMap<>(Map.of("name", "Authorization"))));
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources/test?id={id}", elsewhere, id))
+                .andExpect(jsonPath("$.code").value("priceSource.headerForNewUrl"));
+        // the default address written out is the same address
+        Map<String, Object> explicit = nobitex(true);
+        explicit.put("url", "https://apiv2.nobitex.ir/");
+        explicit.put("headers", List.of(new HashMap<>(Map.of("name", "Authorization"))));
+        mvc.perform(putAs(admin, "/api/v1/admin/price-sources/{id}", explicit, id)).andExpect(status().isOk());
     }
 }

@@ -28,12 +28,15 @@ class JsonPriceProvider implements PriceProvider {
 
     @Override
     public List<QuoteResult> fetch(SourceConfig config) {
-        JsonNode root = PriceJson.parse(http.get(config.uri(config.url()), config.requestHeaders(), config.secrets()));
+        String body = http.get(config.uri(config.url()), config.requestHeaders(), config.secrets());
+        JsonNode root = PriceJson.parse(body);
         List<QuoteResult> results = new ArrayList<>();
+        int missing = 0;
         for (PriceMapping m : config.mappings()) {
             JsonNode node = PriceJson.at(root, m.path());
             if (node.isMissingNode() || node.isNull()) {
                 results.add(QuoteResult.failed(m, "مسیر " + m.path() + " در پاسخ پیدا نشد."));
+                missing++;
                 continue;
             }
             Optional<BigDecimal> raw = PriceJson.positiveNumber(node);
@@ -43,6 +46,12 @@ class JsonPriceProvider implements PriceProvider {
             }
             BigDecimal value = m.multiplier() == null ? raw.get() : raw.get().multiply(m.multiplier());
             results.add(QuoteResult.ok(m, raw.get(), m.unitOr(config.unit()).toToman(value)));
+        }
+        if (missing == results.size()) {
+            // nothing matched: an error answered with 200 ({"success": false, ...}) or a new format; say what came back
+            String detail = PriceHttpClient.detail(body, config.secrets());
+            throw new PriceFetchException("هیچ‌کدام از مسیرها در پاسخ نبود؛ شاید سرویس خطا داده یا قالب پاسخ عوض شده است"
+                    + (detail.isEmpty() ? "." : ": " + detail));
         }
         return results;
     }

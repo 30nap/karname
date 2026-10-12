@@ -22,6 +22,10 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -31,7 +35,9 @@ import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -55,6 +61,14 @@ public class PriceFeedService {
     static final Duration REFERENCE_AGE = Duration.ofDays(7);
 
     private static final Pattern HEADER_NAME = Pattern.compile("^[A-Za-z0-9-]{1,64}$");
+    /** Headers the HTTP client sets itself and refuses to take from a source. */
+    private static final Set<String> RESERVED_HEADERS = Set.of("connection", "content-length", "expect", "host", "upgrade");
+    /** Price tags of hand-entered and implied prices; a source named so would pass for one. */
+    private static final Set<String> RESERVED_NAMES = Set.of("MANUAL", "TRANSACTION");
+    /** Invisible marks that come along when a key is copied from a chat or a web page. */
+    private static final Pattern INVISIBLE = Pattern.compile("\\p{Cf}");
+    private static final Pattern VISIBLE_ASCII = Pattern.compile("^[\\x21-\\x7E]{1,500}$");
+    private static final Pattern HEADER_VALUE = Pattern.compile("^[\\x20-\\x7E]{0,2000}$");
     /** A Nobitex currency: usdt, btc, also 1m_pepe or 100k_floki. */
     private static final Pattern SYMBOL = Pattern.compile("^[a-z0-9_]{2,20}$");
     private static final BigDecimal MAX_MULTIPLIER = new BigDecimal("1e9");
@@ -73,6 +87,8 @@ public class PriceFeedService {
     private final TransactionTemplate transactions;
     private final KarnameProperties properties;
     private final Clock clock;
+    /** Sources being fetched now: a source is never fetched twice at once. */
+    private final Set<Long> running = ConcurrentHashMap.newKeySet();
 
     public PriceFeedService(PriceSourceRepository sources, PriceQuotes quotes, List<PriceProvider> providers, CommodityService commodities,
             PriceService prices, SecretCipher cipher, JsonMapper json, TransactionTemplate transactions, KarnameProperties properties, Clock clock) {
@@ -118,9 +134,12 @@ public class PriceFeedService {
     public record QuoteView(long sourceId, String sourceName, BigDecimal priceToman, Instant fetchedAt, Status status) {
     }
 
-    /** Where a commodity's price comes from: the chosen quote, the others, and a warning when they disagree. */
+    /**
+     * Where a commodity's price comes from: the chosen quote, the others, a warning when they
+     * disagree, and the price last recorded from them ({@code recorded…}).
+     */
     public record CoverageView(String commodity, BigDecimal priceToman, Instant fetchedAt, String source, List<QuoteView> quotes,
-            String warning) {
+            String warning, BigDecimal recordedPrice, Instant recordedAt, String recordedSource) {
     }
 
     /** Outcome of a fetch: per-commodity results, or {@code error} when the source could not be read at all. */
@@ -147,11 +166,34 @@ public class PriceFeedService {
     @Transactional
     public SourceView update(long id, SourceRequest request) {
         PriceSource source = require(id);
+        SourceConfig before = config(source);
         apply(source, request);
         if (sources.existsByNameAndIdNot(source.getName(), id)) {
             throw ApiException.conflict("priceSource.duplicateName");
         }
+        forgetChangedQuotes(source, before, config(source));
         return view(sources.saveAndFlush(source));
+    }
+
+    /**
+     * After an edit, the quotes read under the old settings no longer stand for the source: all of
+     * them when the address, kind, unit, headers or key changed, else those of mappings removed or
+     * changed. The source takes part again with its next fetch.
+     */
+    private void forgetChangedQuotes(PriceSource source, SourceConfig before, SourceConfig after) {
+        quotes.lock();
+        boolean all = before.kind() != after.kind() || !Objects.equals(before.url(), after.url()) || before.unit() != after.unit()
+                || !before.headers().equals(after.headers()) || !Objects.equals(before.apiKey(), after.apiKey());
+        if (all) {
+            quotes.forget(source.getId(), null);
+            return;
+        }
+        Map<String, PriceMapping> now = after.mappings().stream().collect(Collectors.toMap(PriceMapping::commodity, Function.identity()));
+        List<Long> changed = before.mappings().stream()
+                .filter(m -> !m.equals(now.get(m.commodity())))
+                .map(m -> commodities.require(0, m.commodity()).getId())
+                .toList();
+        quotes.forget(source.getId(), changed);
     }
 
     @Transactional
@@ -181,12 +223,14 @@ public class PriceFeedService {
         List<CoverageView> result = new ArrayList<>();
         quotes.all().forEach((code, list) -> {
             Commodity commodity = commodities.require(0, code);
-            Decision d = PriceSelection.decide(list, now, prices.latestFetchedPrice(commodity, now.minus(REFERENCE_AGE)).orElse(null));
+            Decision d = PriceSelection.decide(list, now, reference(commodity, now));
             List<QuoteView> views = d.verdicts().stream().map(v -> new QuoteView(v.quote().sourceId(), v.quote().sourceName(),
                     v.quote().priceToman(), v.quote().fetchedAt(), v.status())).toList();
             Quote chosen = d.chosen();
+            PriceService.Fetched recorded = prices.latestFetched(commodity, Instant.EPOCH).orElse(null);
             result.add(new CoverageView(code, chosen == null ? null : chosen.priceToman(), chosen == null ? null : chosen.fetchedAt(),
-                    chosen == null ? null : chosen.sourceName(), views, d.warning()));
+                    chosen == null ? null : chosen.sourceName(), views, d.warning(), recorded == null ? null : recorded.price(),
+                    recorded == null ? null : recorded.at(), recorded == null ? null : recorded.source()));
         });
         return result;
     }
@@ -205,21 +249,48 @@ public class PriceFeedService {
         if (id != null) {
             PriceSource stored = require(id);
             // the stored address too, so a changed one is noticed and the secrets are not lent to it
+            draft.setKind(stored.getKind());
             draft.setUrl(stored.getUrl());
             draft.setHeadersEncrypted(stored.getHeadersEncrypted());
             draft.setApiKeyEncrypted(stored.getApiKeyEncrypted());
         }
         apply(draft, request);
+        SourceConfig config = config(draft);
         try {
-            return new RunResult(null, provider(draft).fetch(config(draft)), 0);
+            return new RunResult(null, checked(provider(draft).fetch(config), config), 0);
         } catch (PriceFetchException e) {
-            return new RunResult(e.getMessage(), List.of(), 0);
+            return new RunResult(PriceHttpClient.redact(e.getMessage(), config.secrets()), List.of(), 0);
+        } catch (RuntimeException e) {
+            log.error("Testing a price source failed unexpectedly: {}", where(e));
+            return new RunResult(UNEXPECTED, List.of(), 0);
         }
+    }
+
+    static final String UNEXPECTED = "خطای پیش‌بینی‌نشده در دریافت یا ثبت قیمت؛ جزئیات در گزارش سرور است.";
+
+    /** Where an unexpected exception was thrown, without its message: that may quote a secret (an address with the key in it). */
+    private static String where(RuntimeException e) {
+        StackTraceElement[] trace = e.getStackTrace();
+        return e.getClass().getName() + (trace.length > 0 ? " at " + trace[0] : "");
+    }
+
+    /**
+     * Turns a price that cannot be recorded (zero once rounded, beyond the limit) into an error,
+     * and removes secrets from every error, including those quoting the service's answer.
+     */
+    private static List<QuoteResult> checked(List<QuoteResult> results, SourceConfig config) {
+        return results.stream().map(r -> {
+            if (r.ok()) {
+                return PriceService.acceptable(r.priceToman()) ? r
+                        : new QuoteResult(r.commodity(), r.path(), r.raw(), null, "قیمت " + r.priceToman().toPlainString() + " تومان پذیرفتنی نیست؛ واحد یا ضریب را بررسی کنید.");
+            }
+            return new QuoteResult(r.commodity(), r.path(), r.raw(), null, PriceHttpClient.redact(r.error(), config.secrets()));
+        }).toList();
     }
 
     /** Fetches a source now and records its prices. */
     public RunResult run(long id) {
-        return runSource(id);
+        return runSource(id, true);
     }
 
     /** Runs every enabled source whose interval has passed; called by the scheduler each minute. */
@@ -231,10 +302,10 @@ public class PriceFeedService {
                 continue;
             }
             try {
-                runSource(source.getId());
+                runSource(source.getId(), false);
                 ran++;
             } catch (RuntimeException e) {
-                log.error("Price source {} failed", source.getId(), e);
+                log.error("Price source {} failed: {}", source.getId(), where(e));
             }
         }
         return ran;
@@ -244,7 +315,12 @@ public class PriceFeedService {
     public List<RunResult> runAll() {
         List<RunResult> results = new ArrayList<>();
         for (PriceSource source : sources.findByEnabledTrueOrderByPriorityAscIdAsc()) {
-            results.add(runSource(source.getId()));
+            try {
+                results.add(runSource(source.getId(), false));
+            } catch (RuntimeException e) {
+                log.error("Price source {} failed: {}", source.getId(), where(e));
+                results.add(new RunResult(UNEXPECTED, List.of(), 0));
+            }
         }
         return results;
     }
@@ -253,62 +329,101 @@ public class PriceFeedService {
         return prices.thinFetched(KEEP_ALL_FOR, properties.timezone());
     }
 
-    /** Fetches outside any transaction, then records the prices and the run in one. */
-    private RunResult runSource(long id) {
-        PriceSource source = require(id);
-        Instant now = clock.instant();
-        List<QuoteResult> results;
-        String error = null;
-        try {
-            results = provider(source).fetch(config(source));
-        } catch (PriceFetchException e) {
-            results = List.of();
-            error = e.getMessage();
-            log.warn("Price source {} ({}) failed: {}", source.getId(), source.getName(), error);
+    /**
+     * Fetches outside any transaction, then records the prices and the run in one. {@code byHand}:
+     * the admin asked for this source, so it takes part even when switched off, and a jump in its
+     * price counts as confirmed.
+     */
+    private RunResult runSource(long id, boolean byHand) {
+        if (!running.add(id)) {
+            return new RunResult("این منبع همین حالا در حال دریافت قیمت است.", List.of(), 0);
         }
-        List<QuoteResult> fetched = results;
-        String failure = error;
-        return transactions.execute(status -> record(id, now, fetched, failure));
+        try {
+            PriceSource source = require(id);
+            if (!byHand && !source.isEnabled()) {
+                return new RunResult(null, List.of(), 0);
+            }
+            Instant now = clock.instant();
+            SourceConfig config = config(source);
+            List<QuoteResult> results;
+            String error = null;
+            try {
+                results = checked(provider(source).fetch(config), config);
+            } catch (PriceFetchException e) {
+                results = List.of();
+                error = PriceHttpClient.redact(e.getMessage(), config.secrets());
+                log.warn("Price source {} ({}) failed: {}", source.getId(), source.getName(), error);
+            } catch (RuntimeException e) {
+                results = List.of();
+                error = UNEXPECTED;
+                log.error("Price source {} ({}) failed unexpectedly: {}", source.getId(), source.getName(), where(e));
+            }
+            List<QuoteResult> fetched = results;
+            String failure = error;
+            try {
+                return transactions.execute(status -> record(id, now, fetched, failure, byHand));
+            } catch (RuntimeException e) {
+                // the run is still recorded, or the source would be fetched again every minute with nothing shown
+                log.error("Recording price source {} failed: {}", id, where(e));
+                transactions.executeWithoutResult(status -> sources.findById(id).ifPresent(s -> s.recordRun(now, 0, UNEXPECTED)));
+                return new RunResult(UNEXPECTED, List.of(), 0);
+            }
+        } finally {
+            running.remove(id);
+        }
     }
 
-    private RunResult record(long id, Instant now, List<QuoteResult> results, String error) {
+    private RunResult record(long id, Instant fetchedAt, List<QuoteResult> results, String error, boolean byHand) {
         quotes.lock();
+        Instant now = clock.instant();
         PriceSource source = require(id);
         if (error != null) {
-            source.recordRun(now, 0, error);
+            source.recordRun(fetchedAt, 0, error);
             return new RunResult(error, List.of(), 0);
         }
-        List<String> problems = new ArrayList<>();
+        // quotes of commodities the source no longer publishes must not stand for it
+        quotes.forgetAllBut(source.getId(), mappings(source).stream().map(m -> commodities.require(0, m.commodity()).getId()).toList());
+        Instant freshUntil = fetchedAt.plus(PriceSelection.freshness(source.getIntervalMinutes()));
+        List<String> warnings = new ArrayList<>();
+        List<String> failures = new ArrayList<>();
         Set<Commodity> quoted = new LinkedHashSet<>();
         for (QuoteResult r : results) {
             Commodity commodity = commodities.require(0, r.commodity());
             if (!r.ok()) {
-                problems.add(commodity.getNameFa() + ": " + r.error());
+                failures.add(commodity.getNameFa() + ": " + r.error());
                 continue;
             }
-            quotes.store(source.getId(), commodity.getId(), r.priceToman(), now);
+            quotes.store(source.getId(), commodity.getId(), r.priceToman(), fetchedAt, freshUntil);
             quoted.add(commodity);
         }
         int recorded = 0;
         for (Commodity commodity : quoted) {
-            // a switched-off source run by hand takes part this once: the admin asked for its prices
             List<Quote> candidates = quotes.forCommodity(commodity.getId()).stream()
-                    .map(q -> q.sourceId() == source.getId() && !q.enabled()
-                            ? new Quote(q.sourceId(), q.sourceName(), q.priority(), true, q.intervalMinutes(), q.priceToman(), q.fetchedAt()) : q)
+                    .map(q -> byHand && q.sourceId() == source.getId() && !q.enabled() ? q.switchedOn() : q)
                     .toList();
-            Decision d = PriceSelection.decide(candidates, now, prices.latestFetchedPrice(commodity, now.minus(REFERENCE_AGE)).orElse(null));
+            Decision d = PriceSelection.decide(candidates, now, reference(commodity, now), byHand ? source.getId() : null);
             Quote chosen = d.chosen();
-            if (chosen != null && prices.recordFetched(commodity, chosen.priceToman(), chosen.fetchedAt(), chosen.sourceName(), CONFIRM_EVERY)) {
+            if (chosen != null && prices.recordFetched(commodity, chosen.priceToman(), chosen.fetchedAt(), chosen.sourceName(), CONFIRM_EVERY, now)) {
                 recorded++;
             }
-            boolean setAside = d.verdicts().stream().anyMatch(v -> v.quote().sourceId() == source.getId() && v.status() == Status.OUTLIER);
-            if (setAside) {
-                problems.add(commodity.getNameFa() + ": " + d.warning());
+            // this source's quote set aside, held, or far from the one in use: its row should say so
+            boolean concerned = d.verdicts().stream().filter(v -> v.quote().sourceId() == source.getId()).anyMatch(v ->
+                    v.status() == Status.OUTLIER || v.status() == Status.HELD
+                            || v.status() == Status.BACKUP && chosen != null
+                            && PriceSelection.deviation(v.quote().priceToman(), chosen.priceToman()).compareTo(PriceSelection.TOLERANCE) > 0);
+            if (concerned && d.warning() != null) {
+                warnings.add(commodity.getNameFa() + ": " + d.warning());
             }
         }
         int ok = (int) results.stream().filter(QuoteResult::ok).count();
-        source.recordRun(now, ok, problems.isEmpty() ? null : String.join(" | ", problems));
+        // what was set aside or held first: it matters more than a missing path, and the text is cut at 500 characters
+        warnings.addAll(failures);
+        source.recordRun(fetchedAt, ok, warnings.isEmpty() ? null : String.join(" | ", warnings));
         return new RunResult(null, results, recorded);
+    }
+
+    private BigDecimal reference(Commodity commodity, Instant now) {
+        return prices.latestFetched(commodity, now.minus(REFERENCE_AGE)).map(PriceService.Fetched::price).orElse(null);
     }
 
     private PriceProvider provider(PriceSource source) {
@@ -321,7 +436,7 @@ public class PriceFeedService {
 
     private void apply(PriceSource source, SourceRequest r) {
         String name = PersianText.clean(r.name());
-        if (name == null || name.isBlank() || name.length() > 40) {
+        if (name == null || name.isBlank() || name.length() > 40 || RESERVED_NAMES.contains(name.strip().toUpperCase())) {
             throw ApiException.badRequest("priceSource.invalidName");
         }
         if (r.kind() == null) {
@@ -342,15 +457,18 @@ public class PriceFeedService {
             throw ApiException.badRequest("priceSource.invalidInterval");
         }
         List<PriceMapping> mappings = validMappings(r.kind(), r.mappings());
-        // stored header values (API keys) only ever go to the address they were entered for
-        boolean moved = source.getUrl() != null && (url == null || !source.getUrl().replaceAll("/+$", "").equalsIgnoreCase(url.replaceAll("/+$", "")));
+        // stored header values (API keys) only ever go to the address they were entered for; Nobitex
+        // without an address means its default one
+        String before = effectiveUrl(source.getKind(), source.getUrl());
+        boolean moved = before != null && !before.replaceAll("/+$", "").equalsIgnoreCase(Objects.requireNonNullElse(effectiveUrl(r.kind(), url), "").replaceAll("/+$", ""));
         Map<String, String> headers = mergedHeaders(source, r.headers(), moved);
         boolean usesKey = (url != null && url.contains(SourceConfig.KEY)) || headers.values().stream().anyMatch(v -> v.contains(SourceConfig.KEY));
         String key = null;
         if (usesKey) {
             if (r.apiKey() != null && !r.apiKey().isBlank()) {
-                key = r.apiKey().strip();
-                if (key.length() > 500 || key.chars().anyMatch(Character::isISOControl)) {
+                // a key copied from a chat or a page may bring invisible marks or Persian digits along
+                key = INVISIBLE.matcher(PersianText.normalizeDigits(r.apiKey())).replaceAll("").strip();
+                if (!VISIBLE_ASCII.matcher(key).matches()) {
                     throw ApiException.badRequest("priceSource.invalidKey");
                 }
             } else {
@@ -362,6 +480,10 @@ public class PriceFeedService {
                 if (key == null) {
                     throw ApiException.badRequest("priceSource.keyRequired");
                 }
+            }
+            // the address as it will really be asked, with the key in it
+            if (url != null && !OutboundUrls.isAllowed(url.replace(SourceConfig.KEY, URLEncoder.encode(key, StandardCharsets.UTF_8)))) {
+                throw ApiException.badRequest("priceSource.invalidUrl");
             }
         }
 
@@ -428,15 +550,16 @@ public class PriceFeedService {
         }
         for (HeaderInput h : input) {
             String name = h == null || h.name() == null ? "" : h.name().trim();
-            if (!HEADER_NAME.matcher(name).matches()) {
+            if (!HEADER_NAME.matcher(name).matches() || RESERVED_HEADERS.contains(name.toLowerCase())) {
                 throw ApiException.badRequest("priceSource.invalidHeaders");
             }
             boolean kept = h.value() == null || h.value().isEmpty();
             if (kept && moved && stored.containsKey(name)) {
                 throw ApiException.badRequest("priceSource.headerForNewUrl");
             }
-            String value = kept ? stored.get(name) : h.value().trim();
-            if (value == null || value.length() > 2000 || value.contains("\n") || value.contains("\r")) {
+            String value = kept ? stored.get(name) : INVISIBLE.matcher(h.value()).replaceAll("").trim();
+            // HTTP header values are plain ASCII; anything else fails when the request is made
+            if (value == null || !HEADER_VALUE.matcher(value).matches()) {
                 throw ApiException.badRequest("priceSource.invalidHeaders");
             }
             result.put(name, value);
@@ -468,8 +591,23 @@ public class PriceFeedService {
     }
 
     private static boolean validUrl(String url) {
-        // {key} is filled in at request time, URL-encoded; the address is checked with a stand-in
-        return OutboundUrls.isAllowed(url.replace(SourceConfig.KEY, "KEY"));
+        // {key} is filled in at request time, URL-encoded, and only in the path or the query: in the
+        // host it would pick the server to call. Checked here with a stand-in, and again with the key.
+        String standIn = url.replace(SourceConfig.KEY, "karnamekey");
+        try {
+            String authority = new URI(standIn).getRawAuthority();
+            if (authority == null || authority.toLowerCase().contains("karnamekey")) {
+                return false;
+            }
+        } catch (URISyntaxException e) {
+            return false;
+        }
+        return OutboundUrls.isAllowed(standIn);
+    }
+
+    /** The address a source is read from: Nobitex without one uses its default. */
+    private static String effectiveUrl(PriceSourceKind kind, String url) {
+        return kind == PriceSourceKind.NOBITEX && url == null ? NobitexPriceProvider.DEFAULT_URL : url;
     }
 
     private SourceView view(PriceSource s) {

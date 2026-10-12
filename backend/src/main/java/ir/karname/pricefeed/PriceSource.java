@@ -200,9 +200,18 @@ public class PriceSource {
     public void recordRun(Instant at, int count, String error) {
         this.lastRunAt = at;
         this.lastCount = count;
-        this.lastError = error == null ? null : error.length() > 500 ? error.substring(0, 500) : error;
+        this.lastError = error == null ? null : truncate(error.replaceAll("\\p{Cc}+", " "), 500);
         if (count > 0) {
             this.lastSuccessAt = at;
         }
+    }
+
+    /** At most {@code max} characters, never splitting a surrogate pair. */
+    private static String truncate(String text, int max) {
+        if (text.length() <= max) {
+            return text;
+        }
+        int end = Character.isHighSurrogate(text.charAt(max - 1)) ? max - 1 : max;
+        return text.substring(0, end);
     }
 }

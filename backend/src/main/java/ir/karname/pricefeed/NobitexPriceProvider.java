@@ -51,30 +51,43 @@ class NobitexPriceProvider implements PriceProvider {
 
         Map<String, JsonNode> markets = new LinkedHashMap<>();
         Map<String, String> refused = new LinkedHashMap<>();
+        Map<String, String> unasked = new LinkedHashMap<>();
         try {
             markets.putAll(stats(config, base, symbols));
         } catch (PriceFetchException e) {
             if (e.status() != 400 || symbols.size() < 2) {
                 throw e;
             }
+            PriceFetchException stopped = null;
             for (String symbol : symbols) {
+                if (stopped != null) {
+                    unasked.put(symbol, stopped.getMessage());
+                    continue;
+                }
                 try {
                     markets.putAll(stats(config, base, Set.of(symbol)));
                 } catch (PriceFetchException one) {
-                    if (one.status() != 400) {
-                        throw one;
+                    if (one.status() == 400) {
+                        refused.put(symbol, one.getMessage());
+                    } else {
+                        // a rate limit or an outage: stop asking, keep what already arrived
+                        stopped = one;
+                        unasked.put(symbol, one.getMessage());
                     }
-                    refused.put(symbol, one.getMessage());
                 }
             }
-            if (refused.size() == symbols.size()) {
-                throw e;
+            if (markets.isEmpty()) {
+                throw stopped != null ? stopped : e;
             }
         }
 
         List<QuoteResult> results = new ArrayList<>();
         for (PriceMapping m : config.mappings()) {
             String symbol = symbol(m);
+            if (unasked.containsKey(symbol)) {
+                results.add(QuoteResult.failed(m, unasked.get(symbol)));
+                continue;
+            }
             if (refused.containsKey(symbol)) {
                 results.add(QuoteResult.failed(m, "نوبیتکس نماد " + symbol + " را نپذیرفت (شاید نامش عوض شده یا حذف شده است): "
                         + refused.get(symbol)));

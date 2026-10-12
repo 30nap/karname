@@ -38,14 +38,26 @@ order of preference (the arrows beside each source):
 - The recorded price is the quote of the **most preferred source whose quote is fresh**: fetched
   within twice the source's interval plus five minutes. If that source fails, is slow or is
   switched off, the next one takes over on its next fetch; when it comes back, it takes over again.
-- **Cross-checks:** with three or more fresh quotes, one more than 20% from their median is set
-  aside (typically Rial read as Toman, or a price per mesghal read as per gram) and the source's
-  row says so. With two quotes that disagree by more than 20%, the one closer to the last recorded
-  price wins, and a warning is shown. A change of more than 50% from the last recorded price is
-  flagged but still recorded.
+- **Cross-checks:** when more than half of the fresh quotes agree (within 20% of one of them), the
+  others are set aside (typically Rial read as Toman, or a price per mesghal read as per gram) and
+  their sources' rows say so. When the quotes split without such a majority (two that disagree,
+  or two against two), the one nearest the last recorded price wins, with a warning.
+- **Jumps need a second opinion:** a price more than 50% away from the last recorded one (within
+  the past week) is recorded only if another fresh quote agrees with it, or if the admin fetched
+  that source by hand («دریافت حالا»), which counts as confirming it. Otherwise it is held back
+  («منتظر تأیید»), the last good price stays, and the source's row explains why. So a backup that
+  is misconfigured cannot slip in while the preferred source is down, and become the price the
+  next disagreement is judged by.
 - «قیمت هر واحد از کجا می‌آید», under the sources, shows every unit with the quote in use and the
   others: in use, backup, set aside, stale or switched off.
-- A source switched off but fetched by hand («دریافت حالا») takes part that once.
+- A source switched off but fetched by hand («دریافت حالا») takes part that once; scheduled runs
+  and «به‌روزرسانی همه» never use it.
+- A quote counts for the interval the source had when it was fetched: lengthening the interval
+  later does not bring an old quote back. Editing a source drops the quotes it read under the old
+  settings (all of them if the address, kind, unit, headers or key changed; otherwise those of the
+  mappings removed or changed), so a corrected source takes part again with its next fetch.
+- When the source in use changes and its quote is older than the price last recorded, it is
+  recorded at that moment, so the switch shows at once.
 
 To keep the history small, an unchanged price is recorded again only every six hours, and after
 30 days fetched prices are thinned to one per day.
@@ -56,7 +68,7 @@ To keep the history small, an unchanged price is recorded again only every six h
 |---|---|---|---|
 | Nobitex | Tether, Bitcoin, Ether, Toncoin (Gram) in Rial | No | Built in and switched off at first |
 | Wallex | Tether, Bitcoin, Ether, Toncoin (Gram) in Toman | No | One answer with every market (about 0.5 MB) |
-| Bitpin | Tether, Bitcoin, Ether in Toman | No | If the address stops answering, try `api.bitpin.org` |
+| Bitpin | Tether in Toman | No | Its Bitcoin and Ether markets in Toman stopped trading in 2024 but still answer with their last price, so they are left out. If the address stops answering, try `api.bitpin.org` |
 | TGJU | Open-market dollar, euro, pound, dirham, lira, Canadian and Australian dollar, yuan; 18k and 24k gold, melted gold, all five coins; Tether — in Rial | No | The board tgju.org itself reads (`call1.tgju.org/ajax.json`); undocumented, so mirrors `call2`…`call5` make a good backup source |
 | Navasan | The same currencies, 18k gold, melted gold and the five coins, in Toman | Free, from the Telegram bot `@navasan_contact_bot` | A free key allows 120 requests a month (tests and manual fetches count) and is refreshed every two hours, so the preset fetches every 8 hours; coins and melted gold come in thousands of Toman (multiplier 1000); may not answer from inside Iran |
 
@@ -86,10 +98,14 @@ For gold, coins and currencies from any service that answers with JSON:
 
 - **Address** and optional **headers** (stored encrypted and never shown again; changing the
   address requires entering them again).
-- **API key:** if the service wants its key in the address or in a header, write `{key}` there
+- **API key:** if the service wants its key in the path, the query or a header, write `{key}` there
   (`https://api.example.com/latest?api_key={key}`) and enter the key in its own field. It is stored
   encrypted, filled in only when the request is made, never shown again, removed from any error
-  message, and not sent to a changed address until entered again.
+  message (as is the part after `Bearer`, `Token` or `Basic` in a header), and not sent to a
+  changed address until entered again. Invisible marks and Persian digits that come along when a
+  key is copied from a chat are removed. `{key}` may not stand in the host name.
+- **Headers** are plain ASCII; `Host`, `Connection`, `Content-Length`, `Expect` and `Upgrade` are
+  set by the server and cannot be configured.
 - **Unit of the numbers**: Rial or Toman, for the whole source or per mapping. Rial is divided by
   ten in code.
 - **Mappings**: for each unit, a [JSON Pointer](https://www.rfc-editor.org/rfc/rfc6901) to the
@@ -113,6 +129,7 @@ no code change needed.
 
 Addresses may be on the internet or the local network, but not link-local (cloud metadata), and
 redirects are not followed: a moved service is reported with its new address, to be entered by hand.
+A request gets 30 seconds in all, the answer included, and 2 MB.
 
 ## When a source fails
 
@@ -125,6 +142,9 @@ The error under the source says what the service answered. Common cases:
 | `کد HTTP ۴۲۹` | Too many requests: lengthen the interval |
 | `نام سرویس پیدا نشد (DNS)` | The address is wrong, or the server has no internet access |
 | `هدایت کرد` | The service moved; the new address is shown |
+| `هیچ‌کدام از مسیرها در پاسخ نبود` | The service answered, but with an error (`{"success": false, …}`, quoted) or a new format |
+| `منتظر تأیید` / `ثبت نشد` | A price more than 50% away from the last one, with no other source to confirm it (see above) |
+| `کد HTTP ۴۲۹` from Nobitex | Rate limit (20 requests a minute): the symbols that arrived are kept, the rest wait for the next run |
 
 Some services answer only from inside Iran, and some only from outside; if a source works on one
 server and not another, that is usually why.

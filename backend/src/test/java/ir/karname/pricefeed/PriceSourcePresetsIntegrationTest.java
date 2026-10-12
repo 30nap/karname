@@ -102,7 +102,8 @@ class PriceSourcePresetsIntegrationTest extends FinanceTestSupport {
     static final Map<String, Map<String, String>> EXPECTED = Map.of(
             "NOBITEX", Map.of("USDT", "209423", "BTC", "16357002003", "ETH", "514905997", "TON", "!بازار gram-rls"),
             "WALLEX", Map.of("USDT", "209800", "BTC", "16439499999", "ETH", "!مقدار «-»", "TON", "!مسیر /result/symbols/GRAMTMN"),
-            "BITPIN", Map.of("USDT", "267747", "BTC", "3145737420", "ETH", "!مقدار «0»"),
+            // BTC_IRT and ETH_IRT in the answer stopped trading in 2024 (their timestamps): the preset leaves them out
+            "BITPIN", Map.of("USDT", "267747"),
             "TGJU", Map.ofEntries(Map.entry("USD", "209295"), Map.entry("EUR", "243980"), Map.entry("GBP", "319540"),
                     Map.entry("AED", "64653"), Map.entry("TRY", "4960"), Map.entry("CAD", "185290"), Map.entry("AUD", "184260"),
                     Map.entry("CNY", "35530"), Map.entry("GOLD18", "22183800"), Map.entry("GOLD24", "29578200"),

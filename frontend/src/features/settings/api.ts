@@ -127,7 +127,9 @@ export function useReorderPriceSources() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (ids: number[]) => api.put<PriceSource[]>('/admin/price-sources/order', { ids }),
-    onSuccess: (sources) => {
+    onSuccess: async (sources) => {
+      // a list fetched before the change (after a switch was flipped) must not land on top of the new order
+      await queryClient.cancelQueries({ queryKey: priceSourcesKey, exact: true })
       queryClient.setQueryData(priceSourcesKey, sources)
       return queryClient.invalidateQueries({ queryKey: [...priceSourcesKey, 'coverage'] })
     },

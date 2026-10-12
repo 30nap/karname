@@ -123,49 +123,60 @@ public class PriceService {
         return prices.save(new Price(commodity.getId(), global ? null : userId, normalize(priceToman), at, Price.SOURCE_MANUAL, null));
     }
 
-    private record Fetched(String source, BigDecimal price, Instant at) {
+    /** A price recorded from an automatic source. */
+    public record Fetched(String source, BigDecimal price, Instant at) {
     }
 
     /** The newest instance-wide price from an automatic source, if any (manual and implied prices aside). */
-    private java.util.Optional<Fetched> latestFetched(long commodityId) {
+    private java.util.Optional<Fetched> latestFetched(long commodityId, Instant now) {
         return jdbc.sql("""
                         SELECT source, price_toman, priced_at FROM prices
-                        WHERE commodity_id = ? AND user_id IS NULL AND source NOT IN ('MANUAL', 'TRANSACTION')
+                        WHERE commodity_id = ? AND user_id IS NULL AND source NOT IN ('MANUAL', 'TRANSACTION') AND priced_at <= ?
                         ORDER BY priced_at DESC, id DESC LIMIT 1
                         """)
-                .param(commodityId)
+                .params(commodityId, Timestamp.from(now))
                 .query((rs, n) -> new Fetched(rs.getString(1), rs.getBigDecimal(2), rs.getTimestamp(3).toInstant()))
                 .optional();
     }
 
     /** The newest automatically fetched price of a commodity, when it is not older than {@code since}. */
     @Transactional(readOnly = true)
-    public java.util.Optional<BigDecimal> latestFetchedPrice(Commodity commodity, Instant since) {
-        return latestFetched(commodity.getId()).filter(f -> !f.at().isBefore(since)).map(Fetched::price);
+    public java.util.Optional<Fetched> latestFetched(Commodity commodity, Instant since) {
+        return latestFetched(commodity.getId(), clock.instant()).filter(f -> !f.at().isBefore(since));
+    }
+
+    /** Whether a price can be recorded: positive, below the limit, and not zero once rounded to eight decimals. */
+    public static boolean acceptable(BigDecimal priceToman) {
+        return priceToman != null && Decimals.isReasonable(priceToman) && priceToman.signum() > 0 && priceToman.compareTo(MAX_PRICE) < 0
+                && priceToman.setScale(8, RoundingMode.HALF_EVEN).signum() > 0;
     }
 
     /**
-     * Records a price chosen from the automatic sources (instance-wide). Skipped when a fetched
-     * price at least as new is already recorded (the same quote chosen again), and when the
-     * newest fetched price is this source's, unchanged and younger than {@code confirmEvery}: an
-     * unchanged price is re-recorded only that often, enough to show it is current. A switch to
-     * another source is always recorded. Returns whether a row was added.
+     * Records a price chosen from the automatic sources (instance-wide), at {@code quotedAt}, or at
+     * {@code now} when another source's newer price is already recorded (a source taking over with
+     * a quote fetched earlier). Skipped when the newest fetched price is this source's, unchanged
+     * and younger than {@code confirmEvery}: an unchanged price is re-recorded only that often,
+     * enough to show it is current. Returns whether a row was added.
      */
     @Transactional
-    public boolean recordFetched(Commodity commodity, BigDecimal priceToman, Instant pricedAt, String source, Duration confirmEvery) {
+    public boolean recordFetched(Commodity commodity, BigDecimal priceToman, Instant quotedAt, String source, Duration confirmEvery, Instant now) {
         validate(commodity, priceToman);
         BigDecimal price = normalize(priceToman);
-        java.util.Optional<Fetched> latest = latestFetched(commodity.getId());
+        Instant at = quotedAt.isAfter(now) ? now : quotedAt;
+        java.util.Optional<Fetched> latest = latestFetched(commodity.getId(), now);
         if (latest.isPresent()) {
             Fetched last = latest.get();
-            if (!pricedAt.isAfter(last.at())) {
+            if (last.source().equals(source) && last.price().compareTo(price) == 0 && last.at().isAfter(now.minus(confirmEvery))) {
                 return false;
             }
-            if (last.source().equals(source) && last.price().compareTo(price) == 0 && last.at().isAfter(pricedAt.minus(confirmEvery))) {
+            if (!at.isAfter(last.at())) {
+                at = now;
+            }
+            if (!at.isAfter(last.at())) {
                 return false;
             }
         }
-        prices.save(new Price(commodity.getId(), null, price, pricedAt, source, null));
+        prices.save(new Price(commodity.getId(), null, price, at, source, null));
         return true;
     }
 
@@ -232,7 +243,7 @@ public class PriceService {
         if (commodity.isToman()) {
             throw ApiException.badRequest("price.tomanFixed");
         }
-        if (priceToman == null || !Decimals.isReasonable(priceToman) || priceToman.signum() <= 0 || priceToman.compareTo(MAX_PRICE) >= 0) {
+        if (!acceptable(priceToman)) {
             throw ApiException.badRequest("price.invalid");
         }
     }

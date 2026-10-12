@@ -51,10 +51,11 @@ public final class PriceSourcePresets {
                     List.of(m("USDT", "/result/symbols/USDTTMN/stats/lastPrice"), m("BTC", "/result/symbols/BTCTMN/stats/lastPrice"),
                             m("ETH", "/result/symbols/ETHTMN/stats/lastPrice"), m("TON", "/result/symbols/GRAMTMN/stats/lastPrice")),
                     30, "https://wallex.ir", null, null),
-            // a list of {symbol, price}; IRT markets are in Toman
-            new Preset("BITPIN", "بیت‌پین", "قیمت تتر و رمزارزها در بازار تومانی بیت‌پین؛ بدون کلید.",
+            // a list of {symbol, price}; IRT markets are in Toman. Only Tether: BTC_IRT and ETH_IRT stopped
+            // trading in 2024 and still answer with their last price (or 0), which would pass for a current one
+            new Preset("BITPIN", "بیت‌پین", "قیمت تتر در بازار تومانی بیت‌پین؛ بدون کلید. پشتیبان یا محک خوبی برای تتر است.",
                     Coverage.CRYPTO, PriceSourceKind.JSON, "https://api.bitpin.ir/api/v1/mkt/tickers/", PriceUnit.TOMAN, Map.of(),
-                    List.of(m("USDT", "/[symbol=USDT_IRT]/price"), m("BTC", "/[symbol=BTC_IRT]/price"), m("ETH", "/[symbol=ETH_IRT]/price")),
+                    List.of(m("USDT", "/[symbol=USDT_IRT]/price")),
                     30, "https://bitpin.ir", null, "اگر نشانی جواب نداد، api.bitpin.org را امتحان کنید."),
             // the board tgju.org updates itself from: {"current": {slug: {"p": "2,092,950", "ts": ...}}}, all in Rial;
             // usdt-irr is a dead slug frozen since 2020, crypto-tether-irr is the live one

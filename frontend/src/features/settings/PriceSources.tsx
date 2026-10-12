@@ -2,7 +2,7 @@ import {
   AlertTriangle, ArrowDown, ArrowUp, Bitcoin, Braces, CheckCircle2, Coins, ExternalLink, FlaskConical, Globe, KeyRound, MoreVertical, Pencil,
   Plus, RefreshCw, Trash2, X,
 } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -38,6 +38,9 @@ const SUSPICIOUS = 0.2
 
 const usesKey = (url: string, headers: { value: string }[]) => url.includes(KEY) || headers.some((h) => h.value.includes(KEY))
 
+/** Latin text (an address, a JSON path) kept in its own direction inside Persian text. */
+const Ltr = ({ children }: { children: React.ReactNode }) => <bdi dir="ltr" className="font-mono">{children}</bdi>
+
 /** The stored form of a source, ready to send back with one field changed (secrets stay on the server). */
 function toInput(source: PriceSource): PriceSourceInput {
   return {
@@ -49,7 +52,7 @@ function toInput(source: PriceSource): PriceSourceInput {
 function TestResults({ result }: { result: PriceRunResult }) {
   const commodities = useCommodityMap()
   const f = useFormat()
-  if (result.error) return <Alert variant="destructive"><AlertTriangle />{result.error}</Alert>
+  if (result.error) return <Alert variant="destructive"><AlertTriangle /><span className="min-w-0 wrap-anywhere">{result.error}</span></Alert>
   return (
     <div className="overflow-x-auto rounded-xl border">
       <table className="w-full min-w-[26rem] text-sm">
@@ -70,7 +73,7 @@ function TestResults({ result }: { result: PriceRunResult }) {
               <tr key={r.commodity} className="border-t">
                 <td className="p-2">{commodity.nameFa}</td>
                 {r.error ? (
-                  <td colSpan={3} className="p-2 text-end text-xs text-destructive">{r.error}</td>
+                  <td colSpan={3} className="p-2 text-end text-xs text-destructive wrap-anywhere">{r.error}</td>
                 ) : (
                   <>
                     <td className="p-2 text-end tabular text-muted-foreground">{f.number(r.raw ?? '0', { maxFraction: 8 })}</td>
@@ -159,6 +162,8 @@ function SourceForm({ source, preset, onClose }: { source?: PriceSource; preset?
   const [enabled, setEnabled] = useState(source?.enabled ?? true)
   const [error, setError] = useState<string | null>(null)
   const results = useRef<HTMLDivElement>(null)
+  const errorBox = useRef<HTMLDivElement>(null)
+  const keyInput = useRef<HTMLInputElement>(null)
   const priced = commodities.filter((c) => !c.custom && c.code !== 'IRT')
   const nobitex = kind === 'NOBITEX'
   // stored header values are hidden; a stored header kept as is may still carry {key}, as the source reported
@@ -173,7 +178,14 @@ function SourceForm({ source, preset, onClose }: { source?: PriceSource; preset?
     preset: presetId,
   })
   const setMapping = (i: number, change: Partial<PriceMapping>) => setMappings(mappings.map((m, j) => (j === i ? { ...m, ...change } : m)))
-  const failed = (err: unknown) => setError(err instanceof ApiError ? err.message : 'انجام نشد.')
+  // the form is long (a preset brings many prices): bring the message, and the key field when it is the matter, into view
+  const failed = (err: unknown) => {
+    setError(err instanceof ApiError ? err.message : 'انجام نشد.')
+    requestAnimationFrame(() => {
+      errorBox.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      if (err instanceof ApiError && err.code.startsWith('priceSource.key')) keyInput.current?.focus({ preventScroll: true })
+    })
+  }
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -191,11 +203,11 @@ function SourceForm({ source, preset, onClose }: { source?: PriceSource; preset?
         <DialogDescription>
           {preset?.description ?? (nobitex
             ? 'قیمت رمزارزها از بازارهای ریالی نوبیتکس، بدون نیاز به کلید. تتر را می‌توانید به دلار هم نسبت دهید تا نرخ دلار آزاد خودکار شود.'
-            : 'هر سرویسی که قیمت را به‌صورت JSON می‌دهد: برای هر واحد، مسیر عدد در پاسخ را با اشاره‌گر JSON بنویسید؛ مثلاً /data/gold18/price.')}
+            : <>هر سرویسی که قیمت را به‌صورت JSON می‌دهد: برای هر واحد، مسیر عدد در پاسخ را با اشاره‌گر JSON بنویسید؛ مثلاً <Ltr>/data/gold18/price</Ltr>.</>)}
         </DialogDescription>
       </DialogHeader>
       <DialogBody className="grid grid-cols-1 gap-4">
-        {error ? <Alert variant="destructive">{error}</Alert> : null}
+        <div ref={errorBox} className="empty:hidden">{error ? <Alert variant="destructive"><span className="min-w-0 wrap-anywhere">{error}</span></Alert> : null}</div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField label="نام">
             <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} placeholder="مثلاً قیمت طلا" />
@@ -206,17 +218,17 @@ function SourceForm({ source, preset, onClose }: { source?: PriceSource; preset?
           </FormField>
         </div>
         <FormField label="نشانی" optional={nobitex}
-          hint={nobitex ? 'پیش‌فرض: https://apiv2.nobitex.ir' : 'اگر سرویس کلید را در نشانی می‌خواهد، به جای آن {key} بنویسید؛ مثلاً ?api_key={key}'}>
+          hint={nobitex ? <>پیش‌فرض: <Ltr>https://apiv2.nobitex.ir</Ltr></> : <>اگر سرویس کلید را در نشانی می‌خواهد، به جای آن <Ltr>{KEY}</Ltr> بنویسید؛ مثلاً <Ltr>?api_key={KEY}</Ltr></>}>
           <Input value={url} onChange={(e) => setUrl(e.target.value)} dir="ltr" className="text-start" inputMode="url"
             placeholder={nobitex ? 'https://apiv2.nobitex.ir' : 'https://example.com/prices.json'} />
         </FormField>
         {needsKey ? (
           <FormField label="کلید API"
             hint={<>
-              {preset?.keyHelp ?? 'به جای {key} در نشانی و سرآیندها فرستاده می‌شود و هیچ‌وقت دوباره نمایش داده نمی‌شود.'}
+              {preset?.keyHelp ?? <>به جای <Ltr>{KEY}</Ltr> در نشانی و سرآیندها فرستاده می‌شود و هیچ‌وقت دوباره نمایش داده نمی‌شود.</>}
               {preset?.website ? <> <a href={preset.website} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">سایت سرویس<ExternalLink className="size-3" /></a></> : null}
             </>}>
-            <Input value={apiKey} onChange={(e) => setApiKey(e.target.value)} type="password" dir="ltr" className="text-start" autoComplete="off"
+            <Input ref={keyInput} value={apiKey} onChange={(e) => setApiKey(e.target.value)} type="password" dir="ltr" className="text-start" autoComplete="off"
               placeholder={source?.hasApiKey ? '•••••• (ذخیره‌شده)' : ''} />
           </FormField>
         ) : null}
@@ -278,7 +290,7 @@ function SourceForm({ source, preset, onClose }: { source?: PriceSource; preset?
           </Button>
           <p className="text-xs text-muted-foreground">
             ضریب اختیاری است؛ مثلاً اگر سرویس قیمت هر مثقال را می‌دهد و شما قیمت هر گرم را می‌خواهید.
-            {nobitex ? null : ' اگر پاسخ فهرستی از اقلام است، قلم را با فیلدش انتخاب کنید: /gold/[symbol=IR_GOLD_18K]/price'}
+            {nobitex ? null : <> اگر پاسخ فهرستی از اقلام است، قلم را با فیلدش انتخاب کنید: <Ltr>/gold/[symbol=IR_GOLD_18K]/price</Ltr></>}
           </p>
         </fieldset>
         <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2">
@@ -324,20 +336,45 @@ function SourceDialog({ source, onClose }: { source?: PriceSource; onClose: () =
   )
 }
 
-function SourceRow({ source, rank, first, last, onMove, moving, onEdit, onDelete }: {
+function SourceRow({ source, rank, first, last, onMove, moving, focusArrow, onFocused, onEdit, onDelete }: {
   source: PriceSource; rank: number; first: boolean; last: boolean; onMove: (step: -1 | 1) => void; moving: boolean
+  /** After a move, the arrow to put the keyboard focus back on. */
+  focusArrow?: -1 | 1; onFocused: () => void
   onEdit: () => void; onDelete: () => void
 }) {
   const f = useFormat()
   const commodities = useCommodityMap()
   const save = useSavePriceSource()
   const run = useRunPriceSources()
+  const up = useRef<HTMLButtonElement>(null)
+  const down = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (!focusArrow) return
+    // the row moved: the same arrow, or the other one if it cannot go further that way
+    const target = focusArrow === -1 ? (first ? down : up) : (last ? up : down)
+    target.current?.focus()
+    onFocused()
+  }, [focusArrow, first, last, onFocused])
+
+  const ran = (r: PriceRunResult) => {
+    const ok = r.results.filter((x) => !x.error).length
+    const failures = r.results.filter((x) => x.error)
+    if (r.error) toast.error(r.error)
+    else if (ok === 0) toast.error(failures[0]?.error ?? 'هیچ قیمتی دریافت نشد.')
+    else if (r.recorded === 0) toast.info(`${f.number(ok)} قیمت دریافت شد؛ قیمت ثبت‌شده‌ای تغییر نکرد (یا تغییری نبود، یا منبع مقدم‌تری قیمت تازه دارد).`)
+    else if (failures.length) toast.warning(`${f.number(ok)} قیمت دریافت و ${f.number(r.recorded)} قیمت ثبت شد؛ ${f.number(failures.length)} قیمت خطا داشت.`)
+    else toast.success(`${f.number(ok)} قیمت دریافت و ${f.number(r.recorded)} قیمت ثبت شد.`)
+  }
+
   return (
     <li className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 py-3">
       <div className="flex flex-col items-center gap-0.5">
-        <Button variant="ghost" size="icon-sm" aria-label={`ترجیح بیشتر به ${source.name}`} disabled={first || moving} onClick={() => onMove(-1)}><ArrowUp /></Button>
-        <span className="tabular text-xs text-muted-foreground" aria-label={`اولویت ${f.number(rank)}`}>{f.number(rank)}</span>
-        <Button variant="ghost" size="icon-sm" aria-label={`ترجیح کمتر به ${source.name}`} disabled={last || moving} onClick={() => onMove(1)}><ArrowDown /></Button>
+        {/* not disabled while saving, so the focus stays on the arrow */}
+        <Button ref={up} variant="ghost" size="icon-sm" aria-label={`ترجیح بیشتر به ${source.name}`} disabled={first} aria-disabled={moving || undefined}
+          onClick={() => !moving && onMove(-1)}><ArrowUp /></Button>
+        <span className="tabular text-xs text-muted-foreground"><span className="sr-only">اولویت </span>{f.number(rank)}</span>
+        <Button ref={down} variant="ghost" size="icon-sm" aria-label={`ترجیح کمتر به ${source.name}`} disabled={last} aria-disabled={moving || undefined}
+          onClick={() => !moving && onMove(1)}><ArrowDown /></Button>
       </div>
       <div className="min-w-0">
         <p className="flex flex-wrap items-center gap-2 font-medium">
@@ -350,7 +387,9 @@ function SourceRow({ source, rank, first, last, onMove, moving, onEdit, onDelete
           {source.mappings.map((m) => commodities.get(m.commodity).nameFa).join('، ')} | هر {f.number(source.intervalMinutes)} دقیقه
         </p>
         {source.lastError ? (
-          <p className="mt-1 flex items-start gap-1 text-xs text-destructive"><AlertTriangle className="mt-0.5 size-3.5 shrink-0" />{source.lastError}</p>
+          <p className="mt-1 flex items-start gap-1 text-xs text-destructive">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /><span className="min-w-0 wrap-anywhere">{source.lastError}</span>
+          </p>
         ) : null}
         {source.lastSuccessAt ? (
           <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
@@ -366,9 +405,7 @@ function SourceRow({ source, rank, first, last, onMove, moving, onEdit, onDelete
             onError: (e) => toast.error(e instanceof ApiError ? e.message : 'تغییر انجام نشد.'),
           })} />
         <Button variant="ghost" size="icon-sm" aria-label={`دریافت حالا از ${source.name}`} loading={run.isPending}
-          onClick={() => run.mutate(source.id, {
-            onSuccess: ([r]) => (r.error ? toast.error(r.error) : toast.success(`${f.number(r.results.filter((x) => !x.error).length)} قیمت دریافت شد.`)),
-          })}>
+          onClick={() => run.mutate(source.id, { onSuccess: ([r]) => ran(r) })}>
           <RefreshCw />
         </Button>
         <DropdownMenu>
@@ -386,7 +423,7 @@ function SourceRow({ source, rank, first, last, onMove, moving, onEdit, onDelete
 }
 
 const STATUS_LABELS: Record<QuoteStatus, string> = {
-  CHOSEN: 'در استفاده', BACKUP: 'پشتیبان', OUTLIER: 'کنار گذاشته شد', STALE: 'قدیمی', OFF: 'منبع خاموش',
+  CHOSEN: 'در استفاده', BACKUP: 'پشتیبان', OUTLIER: 'کنار گذاشته شد', HELD: 'منتظر تأیید', STALE: 'قدیمی', OFF: 'منبع خاموش',
 }
 
 /** Where every commodity's price comes from, and how the sources compare. */
@@ -397,27 +434,45 @@ function Coverage({ rows }: { rows: PriceCoverage[] }) {
     <div className="grid gap-2">
       <h3 className="text-sm font-medium">قیمت هر واحد از کجا می‌آید</h3>
       <ul className="divide-y rounded-xl border">
-        {rows.map((row) => (
-          <li key={row.commodity} className="grid gap-1.5 p-3">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <span className="font-medium">{commodities.get(row.commodity).nameFa}</span>
-              {row.priceToman ? (
-                <span className="text-sm"><Amount value={row.priceToman} /> <span className="text-xs text-muted-foreground">از {row.source}</span></span>
-              ) : <span className="text-xs text-destructive">هیچ منبعی قیمت تازه ندارد</span>}
-            </div>
-            <ul className="flex flex-wrap gap-1.5">
-              {row.quotes.map((q) => (
-                <li key={q.sourceId} className={cn('rounded-lg border px-2 py-1 text-xs',
-                  q.status === 'CHOSEN' && 'border-primary/40 bg-primary/5',
-                  q.status === 'OUTLIER' && 'border-destructive/40 text-destructive',
-                  (q.status === 'STALE' || q.status === 'OFF') && 'text-muted-foreground')}>
-                  {q.sourceName}: <Amount value={q.priceToman} /> | {STATUS_LABELS[q.status]} | {formatTimeAgo(q.fetchedAt, f.prefs.digits)}
-                </li>
-              ))}
-            </ul>
-            {row.warning ? <p className="flex items-start gap-1 text-xs text-warning"><AlertTriangle className="mt-0.5 size-3.5 shrink-0" />{row.warning}</p> : null}
-          </li>
-        ))}
+        {rows.map((row) => {
+          const allOff = row.quotes.every((q) => q.status === 'OFF')
+          const held = row.quotes.some((q) => q.status === 'HELD')
+          const showRecorded = row.recordedPrice !== null && (row.priceToman === null || Number(row.recordedPrice) !== Number(row.priceToman))
+          return (
+            <li key={row.commodity} className="grid gap-1.5 p-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <span className="font-medium">{commodities.get(row.commodity).nameFa}</span>
+                {row.priceToman ? (
+                  <span className="text-sm"><Amount value={row.priceToman} /> <span className="text-xs text-muted-foreground">از {row.source}</span></span>
+                ) : allOff ? <span className="text-xs text-muted-foreground">منبع این واحد خاموش است؛ فقط با دریافت دستی به‌روز می‌شود.</span>
+                  : held ? <span className="text-xs text-warning">قیمت تازه منتظر تأیید است</span>
+                    : <span className="text-xs text-destructive">هیچ منبعی قیمت تازه ندارد</span>}
+              </div>
+              {showRecorded ? (
+                <p className="text-xs text-muted-foreground">
+                  قیمت ثبت‌شده: <Amount value={row.recordedPrice} /> از {row.recordedSource}
+                  {row.recordedAt ? `، ${formatTimeAgo(row.recordedAt, f.prefs.digits)}` : ''}
+                </p>
+              ) : null}
+              <ul className="flex flex-wrap gap-1.5">
+                {row.quotes.map((q) => (
+                  <li key={q.sourceId} className={cn('rounded-lg border px-2 py-1 text-xs',
+                    q.status === 'CHOSEN' && 'border-primary/40 bg-primary/5',
+                    q.status === 'OUTLIER' && 'border-destructive/40 text-destructive',
+                    q.status === 'HELD' && 'border-warning/50 text-warning',
+                    (q.status === 'STALE' || q.status === 'OFF') && 'text-muted-foreground')}>
+                    {q.sourceName}: <Amount value={q.priceToman} /> | {STATUS_LABELS[q.status]} | {formatTimeAgo(q.fetchedAt, f.prefs.digits)}
+                  </li>
+                ))}
+              </ul>
+              {row.warning ? (
+                <p className="flex items-start gap-1 text-xs text-warning">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /><span className="min-w-0 wrap-anywhere">{row.warning}</span>
+                </p>
+              ) : null}
+            </li>
+          )
+        })}
       </ul>
     </div>
   )
@@ -431,12 +486,23 @@ export function PriceSourcesCard() {
   const reorder = useReorderPriceSources()
   const [editing, setEditing] = useState<{ source?: PriceSource } | null>(null)
   const [deleting, setDeleting] = useState<PriceSource | null>(null)
+  const [moved, setMoved] = useState<{ id: number; step: -1 | 1 } | null>(null)
+  const [announcement, setAnnouncement] = useState('')
+  const f = useFormat()
+  const focused = useCallback(() => setMoved(null), [])
 
   const move = (index: number, step: -1 | 1) => {
     if (!sources) return
+    const source = sources[index]
     const ids = sources.map((s) => s.id)
     ;[ids[index], ids[index + step]] = [ids[index + step], ids[index]]
-    reorder.mutate(ids, { onError: (e) => toast.error(e instanceof ApiError ? e.message : 'ترتیب ذخیره نشد.') })
+    reorder.mutate(ids, {
+      onSuccess: () => {
+        setMoved({ id: source.id, step })
+        setAnnouncement(`«${source.name}» اکنون در اولویت ${f.number(index + step + 1)} است.`)
+      },
+      onError: (e) => toast.error(e instanceof ApiError ? e.message : 'ترتیب ذخیره نشد.'),
+    })
   }
 
   return (
@@ -458,11 +524,12 @@ export function PriceSourcesCard() {
           <ul className="divide-y">
             {sources.map((s, i) => (
               <SourceRow key={s.id} source={s} rank={i + 1} first={i === 0} last={i === sources.length - 1}
-                moving={reorder.isPending} onMove={(step) => move(i, step)}
+                moving={reorder.isPending} onMove={(step) => move(i, step)} focusArrow={moved?.id === s.id ? moved.step : undefined} onFocused={focused}
                 onEdit={() => setEditing({ source: s })} onDelete={() => setDeleting(s)} />
             ))}
           </ul>
         )}
+        <p className="sr-only" aria-live="polite">{announcement}</p>
         {coverage?.length ? <Coverage rows={coverage} /> : null}
       </CardContent>
       <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>

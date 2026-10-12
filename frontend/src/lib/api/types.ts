@@ -613,7 +613,7 @@ export interface PriceSourcePreset {
   note: string | null
 }
 
-export type QuoteStatus = 'CHOSEN' | 'BACKUP' | 'OUTLIER' | 'STALE' | 'OFF'
+export type QuoteStatus = 'CHOSEN' | 'BACKUP' | 'OUTLIER' | 'HELD' | 'STALE' | 'OFF'
 
 export interface PriceCoverage {
   commodity: string
@@ -622,6 +622,10 @@ export interface PriceCoverage {
   source: string | null
   quotes: { sourceId: number; sourceName: string; priceToman: string; fetchedAt: string; status: QuoteStatus }[]
   warning: string | null
+  /** The price last recorded from the automatic sources, whichever it was. */
+  recordedPrice: string | null
+  recordedAt: string | null
+  recordedSource: string | null
 }
 
 export interface QuoteResult {
