@@ -551,9 +551,11 @@ export type PriceUnit = 'RIAL' | 'TOMAN'
 
 export interface PriceMapping {
   commodity: string
-  /** Coin symbol for Nobitex (usdt), JSON Pointer for other APIs (/data/gold18/price). */
+  /** Coin symbol for Nobitex (usdt), JSON Pointer for other APIs (/data/gold18/price, /gold/[symbol=IR_GOLD_18K]/price). */
   path: string
   multiplier: string | null
+  /** The unit of this number when it differs from the source's. */
+  unit?: PriceUnit | null
 }
 
 export interface PriceSource {
@@ -566,6 +568,12 @@ export interface PriceSource {
   mappings: PriceMapping[]
   intervalMinutes: number
   enabled: boolean
+  /** Lower first: a commodity's price comes from the most preferred source with a fresh quote. */
+  priority: number
+  preset: string | null
+  /** The address or a header asks for {key}. */
+  usesKey: boolean
+  hasApiKey: boolean
   lastRunAt: string | null
   lastSuccessAt: string | null
   lastError: string | null
@@ -583,6 +591,37 @@ export interface PriceSourceInput {
   mappings: PriceMapping[]
   intervalMinutes: number
   enabled: boolean
+  /** Replaces {key}; empty keeps the stored one. */
+  apiKey?: string | null
+  preset?: string | null
+}
+
+export interface PriceSourcePreset {
+  id: string
+  name: string
+  description: string
+  coverage: 'CRYPTO' | 'GOLD_CURRENCY' | 'ALL'
+  kind: PriceSourceKind
+  url: string | null
+  unit: PriceUnit
+  headers: Record<string, string>
+  mappings: PriceMapping[]
+  intervalMinutes: number
+  website: string | null
+  /** Where to get a key; null when none is needed. */
+  keyHelp: string | null
+  note: string | null
+}
+
+export type QuoteStatus = 'CHOSEN' | 'BACKUP' | 'OUTLIER' | 'STALE' | 'OFF'
+
+export interface PriceCoverage {
+  commodity: string
+  priceToman: string | null
+  fetchedAt: string | null
+  source: string | null
+  quotes: { sourceId: number; sourceName: string; priceToman: string; fetchedAt: string; status: QuoteStatus }[]
+  warning: string | null
 }
 
 export interface QuoteResult {

@@ -42,11 +42,17 @@ class PriceFeedIntegrationTest extends FinanceTestSupport {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/market/stats", exchange -> {
             requests.add(exchange.getRequestURI().toString());
+            // like Nobitex: one unknown symbol and the whole request is refused
+            if (exchange.getRequestURI().getQuery().contains("xyz")) {
+                respond(exchange, 400, "{\"status\": \"failed\", \"code\": \"InvalidSrcCurrency\", \"message\": \"Invalid srcCurrency\"}");
+                return;
+            }
             respond(exchange, 200, """
                     {"status": "ok", "stats": {
                       "usdt-rls": {"isClosed": false, "bestSell": "1041000", "latest": "%s", "mark": "1039000"},
                       "btc-rls": {"isClosed": false, "bestSell": "75100000000", "latest": "75000000000"},
-                      "eth-rls": {"isClosed": true, "bestSell": "2900000000", "mark": "2880000000"}
+                      "eth-rls": {"isClosed": true, "bestSell": "2900000000", "mark": "2880000000"},
+                      "gram-rls": {"isClosed": false, "bestSell": "52100000", "latest": "52000000"}
                     }}""".formatted(usdtRial));
         });
         server.createContext("/gold.json", exchange -> {
@@ -58,6 +64,17 @@ class PriceFeedIntegrationTest extends FinanceTestSupport {
                     {"data": {"gold18": {"price": "۸۹٬۵۰۰٬۰۰۰"}, "coin": {"emami": 980000000, "half": "n/a"}}}""");
         });
         server.createContext("/broken", exchange -> respond(exchange, 503, "down"));
+        // dollar rates from three services, one of them keyed through the address
+        server.createContext("/fx-rial.json", exchange -> respond(exchange, 200, "{\"usd\": \"1,050,000\"}"));
+        server.createContext("/fx-toman.json", exchange -> respond(exchange, 200, "{\"usd\": 103900}"));
+        server.createContext("/fx-keyed", exchange -> {
+            String query = exchange.getRequestURI().getRawQuery();
+            if (query == null || !query.equals("api_key=k3y%2B1")) {
+                respond(exchange, 401, "{\"message\": \"key " + (query == null ? "" : query.replace("api_key=", "")) + " is not valid\"}");
+                return;
+            }
+            respond(exchange, 200, "[{\"symbol\": \"EUR\", \"price\": 120000}, {\"symbol\": \"USD\", \"price\": 104500}]");
+        });
         server.createContext("/html", exchange -> respond(exchange, 200, "<html>maintenance</html>"));
         server.start();
         base = "http://127.0.0.1:" + server.getAddress().getPort();
@@ -104,6 +121,26 @@ class PriceFeedIntegrationTest extends FinanceTestSupport {
         return body;
     }
 
+    private static Map<String, Object> dollar(String name, String path, String pointer, String unit) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("name", name);
+        body.put("kind", "JSON");
+        body.put("url", base + path);
+        body.put("unit", unit);
+        body.put("mappings", List.of(Map.of("commodity", "USD", "path", pointer)));
+        body.put("intervalMinutes", 30);
+        body.put("enabled", true);
+        return body;
+    }
+
+    private static Map<String, Object> keyed(String key) {
+        Map<String, Object> body = dollar("کلیددار", "/fx-keyed?api_key={key}", "/[symbol=USD]/price", "TOMAN");
+        if (key != null) {
+            body.put("apiKey", key);
+        }
+        return body;
+    }
+
     private long create(TestUser admin, Map<String, Object> body) throws Exception {
         String json = mvc.perform(postAs(admin, "/api/v1/admin/price-sources", body)).andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
@@ -131,10 +168,11 @@ class PriceFeedIntegrationTest extends FinanceTestSupport {
                 .andExpect(jsonPath("$.recorded").value(4))
                 .andExpect(jsonPath("$.results[0].priceToman").value("104000"))
                 .andExpect(jsonPath("$.results[2].raw").value("75000000000"))
-                // a closed market without a last trade falls back to the mark price
-                .andExpect(jsonPath("$.results[3].priceToman").value("288000000"))
-                .andExpect(jsonPath("$.results[4].error").value("بازار ton-rls در پاسخ نوبیتکس نیست."));
-        assertThat(requests.getLast()).isEqualTo("/market/stats?srcCurrency=usdt,btc,eth,ton&dstCurrency=rls");
+                // a closed market's figures are frozen: not a price
+                .andExpect(jsonPath("$.results[3].error").value("بازار eth-rls در نوبیتکس بسته است؛ قیمت آن به‌روز نیست."))
+                // Toncoin is Gram since June 2026: "ton" is asked as "gram"
+                .andExpect(jsonPath("$.results[4].priceToman").value("5200000"));
+        assertThat(requests.getLast()).isEqualTo("/market/stats?srcCurrency=usdt,btc,eth,gram&dstCurrency=rls");
         assertThat(latest(admin, "USDT")).isEqualTo("104000@نوبیتکس آزمایشی");
         assertThat(latest(admin, "USD")).isEqualTo("104000@نوبیتکس آزمایشی");
         assertThat(latest(admin, "BTC")).isEqualTo("7500000000@نوبیتکس آزمایشی");
@@ -150,11 +188,35 @@ class PriceFeedIntegrationTest extends FinanceTestSupport {
             usdtRial = "1040000";
         }
         assertThat(jdbc.sql("SELECT count(*) FROM prices WHERE source = 'نوبیتکس آزمایشی'").query(Long.class).single()).isEqualTo(6);
+        assertThat(latest(admin, "TON")).isEqualTo("5200000@نوبیتکس آزمایشی");
 
         mvc.perform(getAs(admin, "/api/v1/admin/price-sources"))
                 .andExpect(jsonPath("$[?(@.id == " + id + ")].lastCount").value(4))
-                .andExpect(jsonPath("$[?(@.id == " + id + ")].lastError").value("تون‌کوین: بازار ton-rls در پاسخ نوبیتکس نیست."))
+                .andExpect(jsonPath("$[?(@.id == " + id + ")].lastError").value("اتریوم: بازار eth-rls در نوبیتکس بسته است؛ قیمت آن به‌روز نیست."))
                 .andExpect(jsonPath("$[?(@.id == " + id + ")].unit").value("RIAL"));
+    }
+
+    @Test
+    void anUnknownNobitexSymbolDoesNotStopTheOthers() throws Exception {
+        TestUser admin = createUser("admin");
+        Map<String, Object> body = nobitex(true);
+        body.put("mappings", List.of(Map.of("commodity", "USDT", "path", "usdt"), Map.of("commodity", "TON", "path", "xyz")));
+        long id = create(admin, body);
+        requests.clear();
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources/{id}/run", Map.of(), id))
+                .andExpect(jsonPath("$.error").doesNotExist())
+                .andExpect(jsonPath("$.recorded").value(1))
+                .andExpect(jsonPath("$.results[0].priceToman").value("104000"))
+                .andExpect(jsonPath("$.results[1].error").value(
+                        "نوبیتکس نماد xyz را نپذیرفت (شاید نامش عوض شده یا حذف شده است): سرویس با کد HTTP ۴۰۰ پاسخ داد: Invalid srcCurrency"));
+        assertThat(requests).containsExactly("/market/stats?srcCurrency=usdt,xyz&dstCurrency=rls",
+                "/market/stats?srcCurrency=usdt&dstCurrency=rls", "/market/stats?srcCurrency=xyz&dstCurrency=rls");
+        assertThat(latest(admin, "USDT")).isEqualTo("104000@نوبیتکس آزمایشی");
+
+        // when every symbol is refused, the source's own error is the answer
+        body.put("mappings", List.of(Map.of("commodity", "TON", "path", "xyz")));
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources/test", body))
+                .andExpect(jsonPath("$.error").value("سرویس با کد HTTP ۴۰۰ پاسخ داد: Invalid srcCurrency"));
     }
 
     @Test
@@ -182,7 +244,7 @@ class PriceFeedIntegrationTest extends FinanceTestSupport {
         Map<String, Object> keyless = goldApi();
         keyless.remove("headers");
         mvc.perform(postAs(admin, "/api/v1/admin/price-sources/test", keyless))
-                .andExpect(jsonPath("$.error").value("سرویس با کد HTTP ۴۰۱ پاسخ داد."));
+                .andExpect(jsonPath("$.error").value("سرویس با کد HTTP ۴۰۱ پاسخ داد: unauthorized"));
 
         // the stored key is not lent to another address
         Map<String, Object> elsewhere = goldApi();
@@ -208,10 +270,10 @@ class PriceFeedIntegrationTest extends FinanceTestSupport {
         broken.put("url", base + "/broken");
         mvc.perform(putAs(admin, "/api/v1/admin/price-sources/{id}", broken, id)).andExpect(status().isOk());
         mvc.perform(postAs(admin, "/api/v1/admin/price-sources/{id}/run", Map.of(), id))
-                .andExpect(jsonPath("$.error").value("سرویس با کد HTTP ۵۰۳ پاسخ داد."));
+                .andExpect(jsonPath("$.error").value("سرویس با کد HTTP ۵۰۳ پاسخ داد: down"));
         assertThat(latest(admin, "GOLD18")).isEqualTo("8950000@API طلا");
         mvc.perform(getAs(admin, "/api/v1/admin/price-sources"))
-                .andExpect(jsonPath("$[?(@.id == " + id + ")].lastError").value("سرویس با کد HTTP ۵۰۳ پاسخ داد."))
+                .andExpect(jsonPath("$[?(@.id == " + id + ")].lastError").value("سرویس با کد HTTP ۵۰۳ پاسخ داد: down"))
                 .andExpect(jsonPath("$[?(@.id == " + id + ")].lastSuccessAt").value("2026-10-06T08:30:00Z"));
 
         Map<String, Object> html = goldApi();
@@ -221,6 +283,121 @@ class PriceFeedIntegrationTest extends FinanceTestSupport {
         nowhere.put("url", "http://127.0.0.1:1/prices");
         mvc.perform(postAs(admin, "/api/v1/admin/price-sources/test", nowhere))
                 .andExpect(jsonPath("$.error").value(org.hamcrest.Matchers.startsWith("اتصال به سرویس برقرار نشد")));
+    }
+
+    @Test
+    void thePreferredSourceIsRecordedAndAnotherTakesOverWhenItGoesQuiet() throws Exception {
+        TestUser admin = createUser("admin");
+        long rial = create(admin, dollar("منبع اول", "/fx-rial.json", "/usd", "RIAL"));
+        long keyed = create(admin, keyed("k3y+1"));
+
+        // only the second has a quote yet: it is used
+        feeds.run(keyed);
+        assertThat(latest(admin, "USD")).isEqualTo("104500@کلیددار");
+        // the preferred one arrives and takes over
+        clock.advance(Duration.ofMinutes(5));
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources/{id}/run", Map.of(), rial)).andExpect(jsonPath("$.recorded").value(1));
+        assertThat(latest(admin, "USD")).isEqualTo("105000@منبع اول");
+        // while its quote is fresh, the backup only backs it up
+        clock.advance(Duration.ofMinutes(30));
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources/{id}/run", Map.of(), keyed)).andExpect(jsonPath("$.recorded").value(0));
+        assertThat(latest(admin, "USD")).isEqualTo("105000@منبع اول");
+        mvc.perform(getAs(admin, "/api/v1/admin/price-sources/coverage"))
+                .andExpect(jsonPath("$[?(@.commodity == 'USD')].source").value("منبع اول"))
+                .andExpect(jsonPath("$[?(@.commodity == 'USD')].quotes[0].status").value("CHOSEN"))
+                .andExpect(jsonPath("$[?(@.commodity == 'USD')].quotes[1].status").value("BACKUP"));
+
+        // the preferred source falls silent past twice its interval and five minutes: the backup's next quote is recorded
+        clock.advance(Duration.ofMinutes(36));
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources/{id}/run", Map.of(), keyed)).andExpect(jsonPath("$.recorded").value(1));
+        assertThat(latest(admin, "USD")).isEqualTo("104500@کلیددار");
+        mvc.perform(getAs(admin, "/api/v1/admin/price-sources/coverage"))
+                .andExpect(jsonPath("$[?(@.commodity == 'USD')].quotes[0].status").value("STALE"))
+                .andExpect(jsonPath("$[?(@.commodity == 'USD')].quotes[1].status").value("CHOSEN"));
+
+        // back again, and back in use; then the admin prefers the other one
+        clock.advance(Duration.ofMinutes(1));
+        feeds.run(rial);
+        assertThat(latest(admin, "USD")).isEqualTo("105000@منبع اول");
+        long nobitexSeed = jdbc.sql("SELECT id FROM price_sources WHERE name = 'نوبیتکس'").query(Long.class).single();
+        mvc.perform(putAs(admin, "/api/v1/admin/price-sources/order", Map.of("ids", List.of(keyed, rial, nobitexSeed))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(keyed))
+                .andExpect(jsonPath("$[0].priority").value(10));
+        clock.advance(Duration.ofMinutes(1));
+        feeds.run(keyed);
+        assertThat(latest(admin, "USD")).isEqualTo("104500@کلیددار");
+        assertThat(jdbc.sql("SELECT count(*) FROM prices WHERE commodity_id = (SELECT id FROM commodities WHERE code = 'USD')")
+                .query(Long.class).single()).isEqualTo(5);
+
+        mvc.perform(putAs(admin, "/api/v1/admin/price-sources/order", Map.of("ids", List.of(keyed, rial))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("priceSource.invalidOrder"));
+    }
+
+    @Test
+    void aSwitchedOffSourceRunByHandIsUsedThatOnce() throws Exception {
+        TestUser admin = createUser("admin");
+        Map<String, Object> body = dollar("خاموش", "/fx-toman.json", "/usd", "TOMAN");
+        body.put("enabled", false);
+        long off = create(admin, body);
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources/{id}/run", Map.of(), off)).andExpect(jsonPath("$.recorded").value(1));
+        assertThat(latest(admin, "USD")).isEqualTo("103900@خاموش");
+        // but it is not a candidate when others run
+        mvc.perform(getAs(admin, "/api/v1/admin/price-sources/coverage"))
+                .andExpect(jsonPath("$[?(@.commodity == 'USD')].quotes[0].status").value("OFF"));
+        assertThat(feeds.runDue()).isZero();
+    }
+
+    @Test
+    void aSourceFarFromTheOthersIsSetAside() throws Exception {
+        TestUser admin = createUser("admin");
+        // Rial figures declared as Toman: ten times too much, and preferred
+        long wrong = create(admin, dollar("واحد اشتباه", "/fx-rial.json", "/usd", "TOMAN"));
+        long rial = create(admin, dollar("ریالی", "/fx-rial.json", "/usd", "RIAL"));
+        long toman = create(admin, dollar("تومانی", "/fx-toman.json", "/usd", "TOMAN"));
+        feeds.run(rial);
+        feeds.run(toman);
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources/{id}/run", Map.of(), wrong)).andExpect(jsonPath("$.recorded").value(0));
+        assertThat(latest(admin, "USD")).isEqualTo("105000@ریالی");
+        mvc.perform(getAs(admin, "/api/v1/admin/price-sources"))
+                .andExpect(jsonPath("$[?(@.id == " + wrong + ")].lastError").value(org.hamcrest.Matchers.hasItem(
+                        org.hamcrest.Matchers.containsString("«واحد اشتباه» بیش از ۲۰٪ با منابع دیگر فرق داشت"))));
+        mvc.perform(getAs(admin, "/api/v1/admin/price-sources/coverage"))
+                .andExpect(jsonPath("$[?(@.commodity == 'USD')].quotes[0].status").value("OUTLIER"))
+                .andExpect(jsonPath("$[?(@.commodity == 'USD')].warning").value(org.hamcrest.Matchers.hasItem(
+                        org.hamcrest.Matchers.containsString("کنار گذاشته شد"))));
+    }
+
+    @Test
+    void anApiKeyInTheAddressIsStoredApartAndNeverShown() throws Exception {
+        TestUser admin = createUser("admin");
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources", keyed(null)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("priceSource.keyRequired"));
+        long id = create(admin, keyed("k3y+1"));
+        String list = mvc.perform(getAs(admin, "/api/v1/admin/price-sources")).andReturn().getResponse().getContentAsString();
+        assertThat(list).doesNotContain("k3y").contains("{key}");
+        mvc.perform(getAs(admin, "/api/v1/admin/price-sources"))
+                .andExpect(jsonPath("$[?(@.id == " + id + ")].usesKey").value(true))
+                .andExpect(jsonPath("$[?(@.id == " + id + ")].hasApiKey").value(true));
+        assertThat(jdbc.sql("SELECT api_key_enc FROM price_sources WHERE id = ?").param(id).query(String.class).single()).doesNotContain("k3y");
+
+        // a dry run of an edit borrows the stored key; a wrong key is refused and not echoed back
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources/test?id={id}", keyed(null), id))
+                .andExpect(jsonPath("$.error").doesNotExist())
+                .andExpect(jsonPath("$.results[0].priceToman").value("104500"));
+        mvc.perform(postAs(admin, "/api/v1/admin/price-sources/test", keyed("wrong-key")))
+                .andExpect(jsonPath("$.error").value("سرویس با کد HTTP ۴۰۱ پاسخ داد: key ••• is not valid"));
+
+        // the stored key does not follow the source to another address
+        Map<String, Object> moved = keyed(null);
+        moved.put("url", "https://collector.example/fx?k={key}");
+        mvc.perform(putAs(admin, "/api/v1/admin/price-sources/{id}", moved, id))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("priceSource.keyForNewUrl"));
+        moved.put("apiKey", "another");
+        mvc.perform(putAs(admin, "/api/v1/admin/price-sources/{id}", moved, id)).andExpect(status().isOk());
     }
 
     @Test
@@ -290,6 +467,7 @@ class PriceFeedIntegrationTest extends FinanceTestSupport {
         mvc.perform(getAs(admin, "/api/v1/admin/price-sources"))
                 .andExpect(jsonPath("$[0].name").value("نوبیتکس"))
                 .andExpect(jsonPath("$[0].enabled").value(false))
-                .andExpect(jsonPath("$[0].mappings.length()").value(4));
+                .andExpect(jsonPath("$[0].mappings.length()").value(4))
+                .andExpect(jsonPath("$[0].mappings[3].path").value("gram"));
     }
 }

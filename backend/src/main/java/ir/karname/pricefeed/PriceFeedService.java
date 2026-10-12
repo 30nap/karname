@@ -8,6 +8,10 @@ import ir.karname.common.config.KarnameProperties;
 import ir.karname.common.crypto.SecretCipher;
 import ir.karname.common.persian.PersianText;
 import ir.karname.common.web.ApiException;
+import ir.karname.pricefeed.PriceSelection.Decision;
+import ir.karname.pricefeed.PriceSelection.Quote;
+import ir.karname.pricefeed.PriceSelection.Status;
+import ir.karname.pricefeed.PriceSourcePresets.Preset;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -23,6 +27,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,8 +37,10 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Automatic price sources: admin configuration, dry runs and scheduled fetching. A failing source
- * records its error and leaves the last good prices in place.
+ * Automatic price sources: admin configuration, dry runs and scheduled fetching. Every source keeps
+ * its latest quote per commodity; the price recorded for a commodity comes from the most preferred
+ * source whose quote is fresh, the others serving as fallbacks and cross-checks
+ * ({@link PriceSelection}). A failing source records its error and leaves the last good prices in place.
  */
 @Service
 public class PriceFeedService {
@@ -44,9 +51,12 @@ public class PriceFeedService {
     static final Duration CONFIRM_EVERY = Duration.ofHours(6);
     /** Fetched prices older than this are thinned to one per day. */
     static final Duration KEEP_ALL_FOR = Duration.ofDays(30);
+    /** A recorded price older than this is not used to judge new quotes. */
+    static final Duration REFERENCE_AGE = Duration.ofDays(7);
 
     private static final Pattern HEADER_NAME = Pattern.compile("^[A-Za-z0-9-]{1,64}$");
-    private static final Pattern SYMBOL = Pattern.compile("^[a-z0-9]{2,12}$");
+    /** A Nobitex currency: usdt, btc, also 1m_pepe or 100k_floki. */
+    private static final Pattern SYMBOL = Pattern.compile("^[a-z0-9_]{2,20}$");
     private static final BigDecimal MAX_MULTIPLIER = new BigDecimal("1e9");
     private static final TypeReference<List<PriceMapping>> MAPPINGS = new TypeReference<>() {
     };
@@ -54,6 +64,7 @@ public class PriceFeedService {
     };
 
     private final PriceSourceRepository sources;
+    private final PriceQuotes quotes;
     private final Map<PriceSourceKind, PriceProvider> providers;
     private final CommodityService commodities;
     private final PriceService prices;
@@ -63,9 +74,10 @@ public class PriceFeedService {
     private final KarnameProperties properties;
     private final Clock clock;
 
-    public PriceFeedService(PriceSourceRepository sources, List<PriceProvider> providers, CommodityService commodities, PriceService prices,
-            SecretCipher cipher, JsonMapper json, TransactionTemplate transactions, KarnameProperties properties, Clock clock) {
+    public PriceFeedService(PriceSourceRepository sources, PriceQuotes quotes, List<PriceProvider> providers, CommodityService commodities,
+            PriceService prices, SecretCipher cipher, JsonMapper json, TransactionTemplate transactions, KarnameProperties properties, Clock clock) {
         this.sources = sources;
+        this.quotes = quotes;
         this.providers = providers.stream().collect(Collectors.toMap(PriceProvider::kind, Function.identity()));
         this.commodities = commodities;
         this.prices = prices;
@@ -80,16 +92,35 @@ public class PriceFeedService {
     public record HeaderInput(String name, String value) {
     }
 
+    /**
+     * {@code apiKey} replaces {@code {key}} in the address and header values; empty or null keeps the
+     * stored key (unless the address changed). {@code preset} names the template the form started from.
+     */
     public record SourceRequest(String name, PriceSourceKind kind, String url, PriceUnit unit, List<HeaderInput> headers,
-            List<PriceMapping> mappings, Integer intervalMinutes, Boolean enabled) {
+            List<PriceMapping> mappings, Integer intervalMinutes, Boolean enabled, String apiKey, String preset) {
+
+        public SourceRequest(String name, PriceSourceKind kind, String url, PriceUnit unit, List<HeaderInput> headers,
+                List<PriceMapping> mappings, Integer intervalMinutes, Boolean enabled) {
+            this(name, kind, url, unit, headers, mappings, intervalMinutes, enabled, null, null);
+        }
     }
 
     public record HeaderView(String name, boolean hasValue) {
     }
 
+    /** {@code usesKey}: the address or a header asks for {@code {key}}; {@code hasApiKey}: one is stored. */
     public record SourceView(long id, String name, PriceSourceKind kind, String url, PriceUnit unit, List<HeaderView> headers,
-            List<PriceMapping> mappings, int intervalMinutes, boolean enabled, Instant lastRunAt, Instant lastSuccessAt,
-            String lastError, Integer lastCount, Instant nextRunAt) {
+            List<PriceMapping> mappings, int intervalMinutes, boolean enabled, int priority, String preset, boolean usesKey,
+            boolean hasApiKey, Instant lastRunAt, Instant lastSuccessAt, String lastError, Integer lastCount, Instant nextRunAt) {
+    }
+
+    /** One source's latest quote for a commodity and what became of it. */
+    public record QuoteView(long sourceId, String sourceName, BigDecimal priceToman, Instant fetchedAt, Status status) {
+    }
+
+    /** Where a commodity's price comes from: the chosen quote, the others, and a warning when they disagree. */
+    public record CoverageView(String commodity, BigDecimal priceToman, Instant fetchedAt, String source, List<QuoteView> quotes,
+            String warning) {
     }
 
     /** Outcome of a fetch: per-commodity results, or {@code error} when the source could not be read at all. */
@@ -98,7 +129,7 @@ public class PriceFeedService {
 
     @Transactional(readOnly = true)
     public List<SourceView> list() {
-        return sources.findAllByOrderByIdAsc().stream().map(this::view).toList();
+        return sources.findAllByOrderByPriorityAscIdAsc().stream().map(this::view).toList();
     }
 
     @Transactional
@@ -108,6 +139,8 @@ public class PriceFeedService {
         if (sources.existsByName(source.getName())) {
             throw ApiException.conflict("priceSource.duplicateName");
         }
+        // a new source starts last: a fallback until the admin moves it up
+        source.setPriority(sources.maxPriority() + 10);
         return view(sources.saveAndFlush(source));
     }
 
@@ -126,6 +159,42 @@ public class PriceFeedService {
         sources.delete(require(id));
     }
 
+    /** Sets the order of preference: {@code ids} lists every source, most preferred first. */
+    @Transactional
+    public List<SourceView> reorder(List<Long> ids) {
+        List<PriceSource> all = sources.findAllByOrderByPriorityAscIdAsc();
+        if (ids == null || ids.size() != all.size() || !new HashSet<>(ids).equals(all.stream().map(PriceSource::getId).collect(Collectors.toSet()))) {
+            throw ApiException.badRequest("priceSource.invalidOrder");
+        }
+        Map<Long, PriceSource> byId = all.stream().collect(Collectors.toMap(PriceSource::getId, Function.identity()));
+        for (int i = 0; i < ids.size(); i++) {
+            byId.get(ids.get(i)).setPriority((i + 1) * 10);
+        }
+        sources.flush();
+        return list();
+    }
+
+    /** For every commodity some source quotes: the quote in use, the others, and disagreements. */
+    @Transactional(readOnly = true)
+    public List<CoverageView> coverage() {
+        Instant now = clock.instant();
+        List<CoverageView> result = new ArrayList<>();
+        quotes.all().forEach((code, list) -> {
+            Commodity commodity = commodities.require(0, code);
+            Decision d = PriceSelection.decide(list, now, prices.latestFetchedPrice(commodity, now.minus(REFERENCE_AGE)).orElse(null));
+            List<QuoteView> views = d.verdicts().stream().map(v -> new QuoteView(v.quote().sourceId(), v.quote().sourceName(),
+                    v.quote().priceToman(), v.quote().fetchedAt(), v.status())).toList();
+            Quote chosen = d.chosen();
+            result.add(new CoverageView(code, chosen == null ? null : chosen.priceToman(), chosen == null ? null : chosen.fetchedAt(),
+                    chosen == null ? null : chosen.sourceName(), views, d.warning()));
+        });
+        return result;
+    }
+
+    public List<Preset> presets() {
+        return PriceSourcePresets.all();
+    }
+
     /**
      * Fetches without recording anything, to check a configuration from the settings form; with
      * {@code id}, header values left empty are taken from the stored source. No transaction is held
@@ -138,6 +207,7 @@ public class PriceFeedService {
             // the stored address too, so a changed one is noticed and the secrets are not lent to it
             draft.setUrl(stored.getUrl());
             draft.setHeadersEncrypted(stored.getHeadersEncrypted());
+            draft.setApiKeyEncrypted(stored.getApiKeyEncrypted());
         }
         apply(draft, request);
         try {
@@ -156,7 +226,7 @@ public class PriceFeedService {
     public int runDue() {
         Instant now = clock.instant();
         int ran = 0;
-        for (PriceSource source : sources.findByEnabledTrueOrderByIdAsc()) {
+        for (PriceSource source : sources.findByEnabledTrueOrderByPriorityAscIdAsc()) {
             if (source.getLastRunAt() != null && source.getLastRunAt().plus(Duration.ofMinutes(source.getIntervalMinutes())).isAfter(now)) {
                 continue;
             }
@@ -173,7 +243,7 @@ public class PriceFeedService {
     /** Runs all enabled sources now (the «update prices» button). */
     public List<RunResult> runAll() {
         List<RunResult> results = new ArrayList<>();
-        for (PriceSource source : sources.findByEnabledTrueOrderByIdAsc()) {
+        for (PriceSource source : sources.findByEnabledTrueOrderByPriorityAscIdAsc()) {
             results.add(runSource(source.getId()));
         }
         return results;
@@ -194,6 +264,7 @@ public class PriceFeedService {
         } catch (PriceFetchException e) {
             results = List.of();
             error = e.getMessage();
+            log.warn("Price source {} ({}) failed: {}", source.getId(), source.getName(), error);
         }
         List<QuoteResult> fetched = results;
         String failure = error;
@@ -201,25 +272,42 @@ public class PriceFeedService {
     }
 
     private RunResult record(long id, Instant now, List<QuoteResult> results, String error) {
+        quotes.lock();
         PriceSource source = require(id);
         if (error != null) {
             source.recordRun(now, 0, error);
             return new RunResult(error, List.of(), 0);
         }
-        int recorded = 0;
-        List<String> failures = new ArrayList<>();
+        List<String> problems = new ArrayList<>();
+        Set<Commodity> quoted = new LinkedHashSet<>();
         for (QuoteResult r : results) {
             Commodity commodity = commodities.require(0, r.commodity());
             if (!r.ok()) {
-                failures.add(commodity.getNameFa() + ": " + r.error());
+                problems.add(commodity.getNameFa() + ": " + r.error());
                 continue;
             }
-            if (prices.recordFetched(commodity, r.priceToman(), now, source.getName(), CONFIRM_EVERY)) {
+            quotes.store(source.getId(), commodity.getId(), r.priceToman(), now);
+            quoted.add(commodity);
+        }
+        int recorded = 0;
+        for (Commodity commodity : quoted) {
+            // a switched-off source run by hand takes part this once: the admin asked for its prices
+            List<Quote> candidates = quotes.forCommodity(commodity.getId()).stream()
+                    .map(q -> q.sourceId() == source.getId() && !q.enabled()
+                            ? new Quote(q.sourceId(), q.sourceName(), q.priority(), true, q.intervalMinutes(), q.priceToman(), q.fetchedAt()) : q)
+                    .toList();
+            Decision d = PriceSelection.decide(candidates, now, prices.latestFetchedPrice(commodity, now.minus(REFERENCE_AGE)).orElse(null));
+            Quote chosen = d.chosen();
+            if (chosen != null && prices.recordFetched(commodity, chosen.priceToman(), chosen.fetchedAt(), chosen.sourceName(), CONFIRM_EVERY)) {
                 recorded++;
+            }
+            boolean setAside = d.verdicts().stream().anyMatch(v -> v.quote().sourceId() == source.getId() && v.status() == Status.OUTLIER);
+            if (setAside) {
+                problems.add(commodity.getNameFa() + ": " + d.warning());
             }
         }
         int ok = (int) results.stream().filter(QuoteResult::ok).count();
-        source.recordRun(now, ok, failures.isEmpty() ? null : String.join(" | ", failures));
+        source.recordRun(now, ok, problems.isEmpty() ? null : String.join(" | ", problems));
         return new RunResult(null, results, recorded);
     }
 
@@ -228,7 +316,7 @@ public class PriceFeedService {
     }
 
     private SourceConfig config(PriceSource source) {
-        return new SourceConfig(source.getKind(), source.getUrl(), headers(source), source.getUnit(), mappings(source));
+        return new SourceConfig(source.getKind(), source.getUrl(), headers(source), source.getUnit(), mappings(source), apiKey(source));
     }
 
     private void apply(PriceSource source, SourceRequest r) {
@@ -246,6 +334,9 @@ public class PriceFeedService {
         if (url != null && !validUrl(url)) {
             throw ApiException.badRequest("priceSource.invalidUrl");
         }
+        if (r.preset() != null && PriceSourcePresets.find(r.preset()).isEmpty()) {
+            throw ApiException.badRequest("priceSource.unknownPreset");
+        }
         int interval = r.intervalMinutes() == null ? 30 : r.intervalMinutes();
         if (interval < 5 || interval > 1440) {
             throw ApiException.badRequest("priceSource.invalidInterval");
@@ -254,6 +345,25 @@ public class PriceFeedService {
         // stored header values (API keys) only ever go to the address they were entered for
         boolean moved = source.getUrl() != null && (url == null || !source.getUrl().replaceAll("/+$", "").equalsIgnoreCase(url.replaceAll("/+$", "")));
         Map<String, String> headers = mergedHeaders(source, r.headers(), moved);
+        boolean usesKey = (url != null && url.contains(SourceConfig.KEY)) || headers.values().stream().anyMatch(v -> v.contains(SourceConfig.KEY));
+        String key = null;
+        if (usesKey) {
+            if (r.apiKey() != null && !r.apiKey().isBlank()) {
+                key = r.apiKey().strip();
+                if (key.length() > 500 || key.chars().anyMatch(Character::isISOControl)) {
+                    throw ApiException.badRequest("priceSource.invalidKey");
+                }
+            } else {
+                key = apiKey(source);
+                // like the headers: a stored key only ever goes to the address it was entered for
+                if (key != null && moved) {
+                    throw ApiException.badRequest("priceSource.keyForNewUrl");
+                }
+                if (key == null) {
+                    throw ApiException.badRequest("priceSource.keyRequired");
+                }
+            }
+        }
 
         source.setName(name);
         source.setKind(r.kind());
@@ -261,6 +371,10 @@ public class PriceFeedService {
         source.setUnit(r.kind() == PriceSourceKind.NOBITEX ? PriceUnit.RIAL : r.unit() == null ? PriceUnit.TOMAN : r.unit());
         source.setMappings(json.writeValueAsString(mappings));
         source.setHeadersEncrypted(headers.isEmpty() ? null : cipher.encrypt(json.writeValueAsString(headers)));
+        source.setApiKeyEncrypted(key == null ? null : cipher.encrypt(key));
+        if (r.preset() != null || source.getId() == null) {
+            source.setPreset(r.preset());
+        }
         source.setIntervalMinutes(interval);
         if (r.enabled() != null) {
             source.setEnabled(r.enabled());
@@ -296,7 +410,8 @@ public class PriceFeedService {
             if (multiplier != null && (multiplier.signum() <= 0 || multiplier.compareTo(MAX_MULTIPLIER) > 0)) {
                 throw ApiException.badRequest("priceSource.invalidMultiplier");
             }
-            result.add(new PriceMapping(code, path, multiplier == null || multiplier.compareTo(BigDecimal.ONE) == 0 ? null : multiplier));
+            PriceUnit unit = kind == PriceSourceKind.NOBITEX ? null : m.unit();
+            result.add(new PriceMapping(code, path, multiplier == null || multiplier.compareTo(BigDecimal.ONE) == 0 ? null : multiplier, unit));
         }
         return result;
     }
@@ -340,6 +455,10 @@ public class PriceFeedService {
         }
     }
 
+    private String apiKey(PriceSource source) {
+        return source.getApiKeyEncrypted() == null ? null : cipher.decrypt(source.getApiKeyEncrypted());
+    }
+
     private List<PriceMapping> mappings(PriceSource source) {
         try {
             return json.readValue(source.getMappings(), MAPPINGS);
@@ -349,14 +468,18 @@ public class PriceFeedService {
     }
 
     private static boolean validUrl(String url) {
-        return OutboundUrls.isAllowed(url);
+        // {key} is filled in at request time, URL-encoded; the address is checked with a stand-in
+        return OutboundUrls.isAllowed(url.replace(SourceConfig.KEY, "KEY"));
     }
 
     private SourceView view(PriceSource s) {
-        List<HeaderView> headers = headers(s).keySet().stream().map(name -> new HeaderView(name, true)).toList();
+        Map<String, String> stored = headers(s);
+        List<HeaderView> headers = stored.keySet().stream().map(name -> new HeaderView(name, true)).toList();
+        boolean usesKey = (s.getUrl() != null && s.getUrl().contains(SourceConfig.KEY)) || stored.values().stream().anyMatch(v -> v.contains(SourceConfig.KEY));
         Instant next = !s.isEnabled() ? null : s.getLastRunAt() == null ? clock.instant() : s.getLastRunAt().plus(Duration.ofMinutes(s.getIntervalMinutes()));
         return new SourceView(s.getId(), s.getName(), s.getKind(), s.getUrl(), s.getUnit(), headers, mappings(s), s.getIntervalMinutes(),
-                s.isEnabled(), s.getLastRunAt(), s.getLastSuccessAt(), s.getLastError(), s.getLastCount(), next);
+                s.isEnabled(), s.getPriority(), s.getPreset(), usesKey, s.getApiKeyEncrypted() != null, s.getLastRunAt(), s.getLastSuccessAt(),
+                s.getLastError(), s.getLastCount(), next);
     }
 
     private PriceSource require(long id) {

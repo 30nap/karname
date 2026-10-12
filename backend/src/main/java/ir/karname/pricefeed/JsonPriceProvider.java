@@ -4,7 +4,6 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 
 import java.math.BigDecimal;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -29,10 +28,10 @@ class JsonPriceProvider implements PriceProvider {
 
     @Override
     public List<QuoteResult> fetch(SourceConfig config) {
-        JsonNode root = PriceJson.parse(http.get(URI.create(config.url()), config.headers()));
+        JsonNode root = PriceJson.parse(http.get(config.uri(config.url()), config.requestHeaders(), config.secrets()));
         List<QuoteResult> results = new ArrayList<>();
         for (PriceMapping m : config.mappings()) {
-            JsonNode node = root.at(m.path());
+            JsonNode node = PriceJson.at(root, m.path());
             if (node.isMissingNode() || node.isNull()) {
                 results.add(QuoteResult.failed(m, "مسیر " + m.path() + " در پاسخ پیدا نشد."));
                 continue;
@@ -43,7 +42,7 @@ class JsonPriceProvider implements PriceProvider {
                 continue;
             }
             BigDecimal value = m.multiplier() == null ? raw.get() : raw.get().multiply(m.multiplier());
-            results.add(QuoteResult.ok(m, raw.get(), config.unit().toToman(value)));
+            results.add(QuoteResult.ok(m, raw.get(), m.unitOr(config.unit()).toToman(value)));
         }
         return results;
     }

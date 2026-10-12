@@ -123,30 +123,47 @@ public class PriceService {
         return prices.save(new Price(commodity.getId(), global ? null : userId, normalize(priceToman), at, Price.SOURCE_MANUAL, null));
     }
 
-    private record Fetched(BigDecimal price, Instant at) {
+    private record Fetched(String source, BigDecimal price, Instant at) {
+    }
+
+    /** The newest instance-wide price from an automatic source, if any (manual and implied prices aside). */
+    private java.util.Optional<Fetched> latestFetched(long commodityId) {
+        return jdbc.sql("""
+                        SELECT source, price_toman, priced_at FROM prices
+                        WHERE commodity_id = ? AND user_id IS NULL AND source NOT IN ('MANUAL', 'TRANSACTION')
+                        ORDER BY priced_at DESC, id DESC LIMIT 1
+                        """)
+                .param(commodityId)
+                .query((rs, n) -> new Fetched(rs.getString(1), rs.getBigDecimal(2), rs.getTimestamp(3).toInstant()))
+                .optional();
+    }
+
+    /** The newest automatically fetched price of a commodity, when it is not older than {@code since}. */
+    @Transactional(readOnly = true)
+    public java.util.Optional<BigDecimal> latestFetchedPrice(Commodity commodity, Instant since) {
+        return latestFetched(commodity.getId()).filter(f -> !f.at().isBefore(since)).map(Fetched::price);
     }
 
     /**
-     * Records a price fetched from an automatic source (instance-wide), unless the source's last
-     * price for the commodity is the same and younger than {@code confirmEvery}: an unchanged
-     * price is re-recorded only that often, enough to show it is current. Returns whether a row was added.
+     * Records a price chosen from the automatic sources (instance-wide). Skipped when a fetched
+     * price at least as new is already recorded (the same quote chosen again), and when the
+     * newest fetched price is this source's, unchanged and younger than {@code confirmEvery}: an
+     * unchanged price is re-recorded only that often, enough to show it is current. A switch to
+     * another source is always recorded. Returns whether a row was added.
      */
     @Transactional
     public boolean recordFetched(Commodity commodity, BigDecimal priceToman, Instant pricedAt, String source, Duration confirmEvery) {
         validate(commodity, priceToman);
         BigDecimal price = normalize(priceToman);
-        boolean unchanged = jdbc.sql("""
-                        SELECT price_toman, priced_at FROM prices
-                        WHERE commodity_id = ? AND user_id IS NULL AND source = ?
-                        ORDER BY priced_at DESC, id DESC LIMIT 1
-                        """)
-                .params(commodity.getId(), source)
-                .query((rs, n) -> new Fetched(rs.getBigDecimal(1), rs.getTimestamp(2).toInstant()))
-                .optional()
-                .filter(last -> last.price().compareTo(price) == 0 && last.at().isAfter(pricedAt.minus(confirmEvery)))
-                .isPresent();
-        if (unchanged) {
-            return false;
+        java.util.Optional<Fetched> latest = latestFetched(commodity.getId());
+        if (latest.isPresent()) {
+            Fetched last = latest.get();
+            if (!pricedAt.isAfter(last.at())) {
+                return false;
+            }
+            if (last.source().equals(source) && last.price().compareTo(price) == 0 && last.at().isAfter(pricedAt.minus(confirmEvery))) {
+                return false;
+            }
         }
         prices.save(new Price(commodity.getId(), null, price, pricedAt, source, null));
         return true;

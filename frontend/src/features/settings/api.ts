@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, query } from '@/lib/api/client'
-import type { AdminUser, AuthStatus, Me, PriceRunResult, PriceSource, PriceSourceInput, Role } from '@/lib/api/types'
+import type { AdminUser, AuthStatus, Me, PriceCoverage, PriceRunResult, PriceSource, PriceSourceInput, PriceSourcePreset, Role } from '@/lib/api/types'
 import { authStatusKey } from '@/features/auth/api'
 import { invalidateFinance } from '@/features/transactions/invalidate'
 
@@ -106,6 +106,32 @@ const priceSourcesKey = ['admin', 'price-sources'] as const
 
 export function usePriceSources(enabled: boolean) {
   return useQuery({ queryKey: priceSourcesKey, queryFn: () => api.get<PriceSource[]>('/admin/price-sources'), enabled })
+}
+
+export function usePricePresets(enabled: boolean) {
+  return useQuery({
+    queryKey: ['admin', 'price-presets'],
+    queryFn: () => api.get<PriceSourcePreset[]>('/admin/price-sources/presets'),
+    enabled,
+    staleTime: Infinity,
+  })
+}
+
+/** Where each commodity's price comes from; refreshed with the sources. */
+export function usePriceCoverage(enabled: boolean) {
+  return useQuery({ queryKey: [...priceSourcesKey, 'coverage'], queryFn: () => api.get<PriceCoverage[]>('/admin/price-sources/coverage'), enabled })
+}
+
+/** Saves the order of preference, most preferred first. */
+export function useReorderPriceSources() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (ids: number[]) => api.put<PriceSource[]>('/admin/price-sources/order', { ids }),
+    onSuccess: (sources) => {
+      queryClient.setQueryData(priceSourcesKey, sources)
+      return queryClient.invalidateQueries({ queryKey: [...priceSourcesKey, 'coverage'] })
+    },
+  })
 }
 
 export function useSavePriceSource() {

@@ -24,7 +24,35 @@ test('an automatic source reads prices in Rial from an outside API', async ({ pa
   await page.getByRole('button', { name: `دریافت حالا از ${name}` }).click()
   await expect(page.getByText('۱ قیمت دریافت شد.')).toBeVisible()
 
-  // 1,025,000 Rial = 102,500 Toman
-  await page.goto('/assets')
-  await expect(page.getByRole('button', { name: /دلار آمریکا/ }).first()).toContainText('۱۰۲٬۵۰۰')
+  // 1,025,000 Rial = 102,500 Toman, as this source's quote (which source's quote is in use depends on the others)
+  await page.reload()
+  await expect(page.getByRole('listitem').filter({ hasText: `${name}: ` }).last()).toContainText('۱۰۲٬۵۰۰')
+})
+
+test('a failing source shows the reason it gave, and another source supplies the price', async ({ page }) => {
+  await page.goto('/settings?tab=admin')
+  const call = api(page)
+  const failing = uniqueName('خراب')
+  const backup = uniqueName('پشتیبان')
+  const source = (name: string, path: string, pointer: string) => ({
+    name, kind: 'JSON', url: MOCK_PRICES.replace('/prices.json', path), unit: 'TOMAN', headers: [], intervalMinutes: 30, enabled: true,
+    mappings: [{ commodity: 'USD', path: pointer, multiplier: null }],
+  })
+  const created = [
+    await call<{ id: number }>('POST', '/admin/price-sources', source(failing, '/rejects.json', '/usd')),
+    await call<{ id: number }>('POST', '/admin/price-sources', source(backup, '/prices-toman.json', '/usd')),
+  ]
+  try {
+    await page.goto('/assets')
+    await page.getByRole('button', { name: 'به‌روزرسانی قیمت‌ها' }).click()
+    await expect(page.getByText(/پاسخ نداد: سرویس با کد HTTP ۴۰۰ پاسخ داد: Invalid srcCurrency/)).toBeVisible()
+
+    await page.goto('/settings?tab=admin')
+    await expect(page.getByText('سرویس با کد HTTP ۴۰۰ پاسخ داد: Invalid srcCurrency').first()).toBeVisible()
+    const coverage = page.getByRole('listitem').filter({ hasText: `${backup}: ` }).first()
+    await expect(coverage).toContainText('در استفاده')
+    await expect(coverage).toContainText('۱۰۳٬۰۰۰')
+  } finally {
+    for (const { id } of created) await call('DELETE', `/admin/price-sources/${id}`)
+  }
 })

@@ -48,7 +48,10 @@ The screenshots show the built-in demo data (`KARNAME_DEMO`) and the offline scr
   reached.
 
 **Prices and data**
-- Manual prices, and automatic ones from Nobitex or any JSON API (Rial or Toman, any field).
+- Manual prices, and automatic ones from several sources at once: ready-made (Nobitex, Wallex,
+  Bitpin and more) or any JSON API (Rial or Toman, any field, API keys kept secret). Each price comes
+  from the most preferred source with a fresh quote; the others take over when it fails and
+  cross-check it, so a misconfigured source (Rial read as Toman) is set aside instead of recorded.
 - CSV export that opens correctly in Excel, bank statement import with column mapping and
   preview, and a full JSON backup and restore.
 
@@ -169,5 +172,6 @@ cd backend && ./gradlew liveAiTest  # optional evaluation against a real model (
   from an automatic source; record a manual price after the last fetched one to override it.
 - **Local models** are weaker in Persian and at using tools than large hosted models; for models
   without tool use, Karname sends a summary of your figures with each question instead.
-- **Price APIs** change their formats; the generic JSON source lets you fix a field path without
-  code, and stale prices are flagged.
+- **Price APIs** change their formats and symbols (Toncoin became Gram in 2026); the error under a
+  source quotes the service's own reason, the generic JSON source lets you fix a field path without
+  code, a backup source covers the gap, and stale prices are flagged.

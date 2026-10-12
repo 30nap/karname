@@ -11,7 +11,7 @@ Spring Boot 4.1 on Java 25 ── one deployable, modules by feature
    │   ├─ REST API under /api/v1, Server-Sent Events for the assistant
    │   ├─ scheduled jobs: recurring postings, notifications, price feeds
    │   ├─ LLM port → Anthropic SDK | OpenAI-compatible HTTP | offline fake
-   │   └─ price port → Nobitex | any JSON API
+   │   └─ price port → Nobitex | any JSON API (presets: Wallex, Bitpin, …) → one price per unit from several sources
    ▼
 PostgreSQL 16 (Flyway migrations; sessions stored here too)
 ```
@@ -51,7 +51,7 @@ depend on reports or AI; the LLM adapters depend on nothing but their port).
 | `ledger` | Balances, valuation on a date, net worth in several units, cost basis, the dashboard |
 | `budget`, `report`, `goal` | Monthly budgets, reports and unusual spending, goals with projections |
 | `loan`, `recurring`, `cheque`, `forecast`, `notification` | Obligations, schedules, the cash-flow forecast and in-app notifications |
-| `pricefeed` | Automatic price sources and their scheduler |
+| `pricefeed` | Automatic price sources: providers (Nobitex, any JSON API), ready-made presets, the scheduler, and the choice among several sources' quotes per unit (preference, fallback, cross-checks) |
 | `io` | CSV export, statement import, JSON backup and restore |
 | `ai` | The LLM port and adapters, services and routing, finance tools, the chat loop, capture (quick add, SMS), insight (reports, categorization), usage and quotas |
 | `demo` | Optional sample data for a demo user |

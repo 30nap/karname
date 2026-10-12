@@ -7,6 +7,8 @@ import ir.karname.account.AccountType;
 import ir.karname.category.Category;
 import ir.karname.category.CategoryService;
 import ir.karname.commodity.CommodityService;
+import ir.karname.commodity.Price;
+import ir.karname.commodity.PriceRepository;
 import ir.karname.commodity.PriceService;
 import ir.karname.transaction.Transaction;
 import ir.karname.transaction.TransactionService;
@@ -15,7 +17,6 @@ import ir.karname.transaction.TransactionType;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -40,6 +41,9 @@ public abstract class FinanceTestSupport extends AbstractIntegrationTest {
 
     @Autowired
     protected PriceService priceService;
+
+    @Autowired
+    protected PriceRepository priceRepository;
 
     protected Account account(TestUser user, String name, AccountType type, String commodity, String opening) {
         return accountService.create(user.id(), new AccountRequest(name, type, commodity, null, null, null, null, null, null,
@@ -70,7 +74,8 @@ public abstract class FinanceTestSupport extends AbstractIntegrationTest {
                 new BigDecimal(amount), to.getId(), toAmount == null ? null : new BigDecimal(toAmount), null, null, null, null, List.of()));
     }
 
+    /** An instance-wide price at any moment, in any order (straight into the table, unlike the price feeds). */
     protected void globalPrice(String code, String priceToman, Instant at) {
-        priceService.recordFetched(commodityService.require(0, code), new BigDecimal(priceToman), at, "TEST", Duration.ZERO);
+        priceRepository.save(new Price(commodityService.require(0, code).getId(), null, new BigDecimal(priceToman), at, "TEST", null));
     }
 }

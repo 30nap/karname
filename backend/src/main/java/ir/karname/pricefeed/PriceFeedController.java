@@ -1,8 +1,10 @@
 package ir.karname.pricefeed;
 
+import ir.karname.pricefeed.PriceFeedService.CoverageView;
 import ir.karname.pricefeed.PriceFeedService.RunResult;
 import ir.karname.pricefeed.PriceFeedService.SourceRequest;
 import ir.karname.pricefeed.PriceFeedService.SourceView;
+import ir.karname.pricefeed.PriceSourcePresets.Preset;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -42,6 +44,27 @@ public class PriceFeedController {
     @PutMapping("/{id}")
     public SourceView update(@PathVariable long id, @RequestBody SourceRequest request) {
         return feeds.update(id, request);
+    }
+
+    /** Ready-made configurations for known services. */
+    @GetMapping("/presets")
+    public List<Preset> presets() {
+        return feeds.presets();
+    }
+
+    /** Where each commodity's price comes from, and how the sources compare. */
+    @GetMapping("/coverage")
+    public List<CoverageView> coverage() {
+        return feeds.coverage();
+    }
+
+    public record OrderRequest(List<Long> ids) {
+    }
+
+    /** The order of preference, most preferred first. */
+    @PutMapping("/order")
+    public List<SourceView> reorder(@RequestBody OrderRequest request) {
+        return feeds.reorder(request == null ? null : request.ids());
     }
 
     @DeleteMapping("/{id}")

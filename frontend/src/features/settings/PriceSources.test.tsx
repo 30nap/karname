@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { Commodity, PriceSource } from '@/lib/api/types'
+import type { Commodity, PriceCoverage, PriceSource, PriceSourcePreset } from '@/lib/api/types'
 import { authStatus, COMMODITIES } from '@/test/fixtures'
 import { renderWithProviders, stubApi } from '@/test/utils'
 import { PriceSourcesCard } from './PriceSources'
@@ -11,14 +11,29 @@ const USDT: Commodity = { code: 'USDT', nameFa: 'تتر', unitFa: 'تتر', kind
 const NOBITEX: PriceSource = {
   id: 1, name: 'نوبیتکس', kind: 'NOBITEX', url: 'https://apiv2.nobitex.ir', unit: 'RIAL', headers: [],
   mappings: [{ commodity: 'USDT', path: 'usdt', multiplier: null }], intervalMinutes: 30, enabled: false,
-  lastRunAt: null, lastSuccessAt: null, lastError: null, lastCount: null, nextRunAt: null,
+  priority: 10, preset: 'NOBITEX', usesKey: false, hasApiKey: false, lastRunAt: null, lastSuccessAt: null, lastError: null, lastCount: null, nextRunAt: null,
 }
 const GOLD_API: PriceSource = {
   id: 2, name: 'API طلا', kind: 'JSON', url: 'https://example.com/gold.json', unit: 'RIAL', headers: [{ name: 'X-Api-Key', hasValue: true }],
   mappings: [{ commodity: 'GOLD18', path: '/data/gold18', multiplier: null }], intervalMinutes: 60, enabled: true,
-  lastRunAt: '2026-10-06T08:00:00Z', lastSuccessAt: '2026-10-06T07:00:00Z', lastError: 'سرویس با کد HTTP ۵۰۳ پاسخ داد.', lastCount: 0,
+  priority: 20, preset: null, usesKey: false, hasApiKey: false, lastRunAt: '2026-10-06T08:00:00Z', lastSuccessAt: '2026-10-06T07:00:00Z', lastError: 'سرویس با کد HTTP ۵۰۳ پاسخ داد.', lastCount: 0,
   nextRunAt: '2026-10-06T09:00:00Z',
 }
+
+const KEYED: PriceSourcePreset = {
+  id: 'NAVASAN', name: 'نوسان', description: 'ارز، طلا و سکه؛ با کلید رایگان.', coverage: 'GOLD_CURRENCY', kind: 'JSON',
+  url: 'https://api.navasan.tech/latest/?api_key={key}', unit: 'TOMAN', headers: {}, intervalMinutes: 360, website: 'https://navasan.tech',
+  keyHelp: 'کلید را از پنل نوسان بگیرید.', note: 'سهمیه‌ی ماهانه دارد.',
+  mappings: [{ commodity: 'USD', path: '/usd_sell/value', multiplier: null }],
+}
+
+const COVERAGE: PriceCoverage[] = [{
+  commodity: 'USDT', priceToman: '104000', fetchedAt: '2026-10-06T08:20:00Z', source: 'نوبیتکس', warning: 'منابع با هم اختلاف دارند.',
+  quotes: [
+    { sourceId: 1, sourceName: 'نوبیتکس', priceToman: '104000', fetchedAt: '2026-10-06T08:20:00Z', status: 'CHOSEN' },
+    { sourceId: 2, sourceName: 'API طلا', priceToman: '1040000', fetchedAt: '2026-10-06T08:20:00Z', status: 'OUTLIER' },
+  ],
+}]
 
 function setup() {
   const requests: { method: string; url: string; body?: unknown }[] = []
@@ -28,12 +43,15 @@ function setup() {
     if (url === '/commodities') return { body: [...COMMODITIES, GOLD, USDT] }
     if (method !== 'GET') {
       requests.push({ method, url, body: init.body ? JSON.parse(String(init.body)) : undefined })
+      if (url === '/admin/price-sources/order') return { body: [{ ...GOLD_API, priority: 10 }, { ...NOBITEX, priority: 20 }] }
       if (url.startsWith('/admin/price-sources/test')) {
         return { body: { error: null, recorded: 0, results: [{ commodity: 'GOLD18', path: '/data/gold18', raw: '89500000', priceToman: '8950000', error: null }] } }
       }
       return { body: GOLD_API }
     }
     if (url === '/admin/price-sources') return { body: [NOBITEX, GOLD_API] }
+    if (url === '/admin/price-sources/presets') return { body: [KEYED] }
+    if (url === '/admin/price-sources/coverage') return { body: COVERAGE }
   })
   return { requests, user: userEvent.setup() }
 }
@@ -65,5 +83,33 @@ describe('PriceSourcesCard', () => {
     await user.click(within(dialog).getByRole('button', { name: 'ذخیره' }))
     await waitFor(() => expect(requests).toHaveLength(2))
     expect(requests[1]).toMatchObject({ method: 'PUT', url: '/admin/price-sources/2', body: { headers: [{ name: 'X-Api-Key', value: null }] } })
+  })
+
+  it('starts a keyed source from a preset and sends the key apart', async () => {
+    const { requests, user } = setup()
+    renderWithProviders(<PriceSourcesCard />)
+    await screen.findByText('API طلا')
+    await user.click(screen.getByRole('button', { name: 'منبع جدید' }))
+    await user.click(await screen.findByRole('button', { name: /نوسان/ }))
+    const dialog = await screen.findByRole('dialog', { name: 'منبع جدید: نوسان' })
+    expect(within(dialog).getByText('کلید را از پنل نوسان بگیرید.')).toBeInTheDocument()
+    await user.type(within(dialog).getByLabelText('کلید API'), 'my-key')
+    await user.click(within(dialog).getByRole('button', { name: 'ذخیره' }))
+    await waitFor(() => expect(requests).toHaveLength(1))
+    expect(requests[0]).toMatchObject({
+      method: 'POST', url: '/admin/price-sources',
+      body: { name: 'نوسان', preset: 'NAVASAN', apiKey: 'my-key', url: 'https://api.navasan.tech/latest/?api_key={key}', intervalMinutes: 360 },
+    })
+  })
+
+  it('reorders sources and shows where each price comes from', async () => {
+    const { requests, user } = setup()
+    renderWithProviders(<PriceSourcesCard />)
+    expect(await screen.findByText('منابع با هم اختلاف دارند.')).toBeInTheDocument()
+    expect(screen.getByText(/کنار گذاشته شد/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'ترجیح بیشتر به نوبیتکس' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'ترجیح بیشتر به API طلا' }))
+    await waitFor(() => expect(requests).toHaveLength(1))
+    expect(requests[0]).toMatchObject({ method: 'PUT', url: '/admin/price-sources/order', body: { ids: [2, 1] } })
   })
 })

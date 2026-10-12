@@ -35,6 +35,18 @@ public class PriceSource {
     @Column(name = "headers_enc")
     private String headersEncrypted;
 
+    /** Sent in place of {key} in the address or a header value; encrypted like the headers. */
+    @Column(name = "api_key_enc")
+    private String apiKeyEncrypted;
+
+    /** Lower first: the recorded price of a commodity comes from the most preferred source with a fresh quote. */
+    @Column(nullable = false)
+    private int priority = 100;
+
+    /** The built-in template the source was made from, if any. */
+    @Column(length = 24)
+    private String preset;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 8)
     private PriceUnit unit = PriceUnit.TOMAN;
@@ -106,6 +118,30 @@ public class PriceSource {
 
     public void setHeadersEncrypted(String headersEncrypted) {
         this.headersEncrypted = headersEncrypted;
+    }
+
+    public String getApiKeyEncrypted() {
+        return apiKeyEncrypted;
+    }
+
+    public void setApiKeyEncrypted(String apiKeyEncrypted) {
+        this.apiKeyEncrypted = apiKeyEncrypted;
+    }
+
+    public int getPriority() {
+        return priority;
+    }
+
+    public void setPriority(int priority) {
+        this.priority = priority;
+    }
+
+    public String getPreset() {
+        return preset;
+    }
+
+    public void setPreset(String preset) {
+        this.preset = preset;
     }
 
     public PriceUnit getUnit() {
