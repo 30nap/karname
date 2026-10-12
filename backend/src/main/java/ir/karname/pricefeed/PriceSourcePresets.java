@@ -55,7 +55,34 @@ public final class PriceSourcePresets {
             new Preset("BITPIN", "بیت‌پین", "قیمت تتر و رمزارزها در بازار تومانی بیت‌پین؛ بدون کلید.",
                     Coverage.CRYPTO, PriceSourceKind.JSON, "https://api.bitpin.ir/api/v1/mkt/tickers/", PriceUnit.TOMAN, Map.of(),
                     List.of(m("USDT", "/[symbol=USDT_IRT]/price"), m("BTC", "/[symbol=BTC_IRT]/price"), m("ETH", "/[symbol=ETH_IRT]/price")),
-                    30, "https://bitpin.ir", null, "اگر نشانی جواب نداد، api.bitpin.org را امتحان کنید."));
+                    30, "https://bitpin.ir", null, "اگر نشانی جواب نداد، api.bitpin.org را امتحان کنید."),
+            // the board tgju.org updates itself from: {"current": {slug: {"p": "2,092,950", "ts": ...}}}, all in Rial;
+            // usdt-irr is a dead slug frozen since 2020, crypto-tether-irr is the live one
+            new Preset("TGJU", "شبکه اطلاع‌رسانی طلا و ارز (TGJU)",
+                    "دلار و ارزهای بازار آزاد، طلا، آب‌شده، سکه و تتر به ریال؛ بدون کلید. در دسترس از داخل و خارج ایران.",
+                    Coverage.GOLD_CURRENCY, PriceSourceKind.JSON, "https://call1.tgju.org/ajax.json", PriceUnit.RIAL, Map.of(),
+                    List.of(m("USD", "/current/price_dollar_rl/p"), m("EUR", "/current/price_eur/p"), m("GBP", "/current/price_gbp/p"),
+                            m("AED", "/current/price_aed/p"), m("TRY", "/current/price_try/p"), m("CAD", "/current/price_cad/p"),
+                            m("AUD", "/current/price_aud/p"), m("CNY", "/current/price_cny/p"),
+                            m("GOLD18", "/current/geram18/p"), m("GOLD24", "/current/geram24/p"), m("MESGHAL", "/current/mesghal/p"),
+                            m("COIN_EMAMI", "/current/sekee/p"), m("COIN_BAHAR", "/current/sekeb/p"), m("COIN_HALF", "/current/nim/p"),
+                            m("COIN_QUARTER", "/current/rob/p"), m("COIN_GERAMI", "/current/gerami/p"),
+                            m("USDT", "/current/crypto-tether-irr/p")),
+                    30, "https://www.tgju.org", null,
+                    "سرویس رسمی و مستند نیست. اگر call1 جواب نداد، call2.tgju.org یا call3.tgju.org را امتحان کنید یا یکی را منبع پشتیبان کنید."),
+            // /latest/ answers every item at once: {"usd_sell": {"value": "192600", ...}}, in Toman, coins and melted gold
+            // in thousands of Toman; the free key allows 120 requests a month, so one every eight hours
+            new Preset("NAVASAN", "نوسان", "دلار و ارزهای بازار تهران، طلا، آب‌شده و سکه به تومان؛ کلید رایگان.",
+                    Coverage.GOLD_CURRENCY, PriceSourceKind.JSON, "https://api.navasan.tech/latest/?api_key={key}", PriceUnit.TOMAN, Map.of(),
+                    List.of(m("USD", "/usd_sell/value"), m("EUR", "/eur/value"), m("GBP", "/gbp/value"), m("AED", "/aed/value"),
+                            m("TRY", "/try/value"), m("CAD", "/cad/value"), m("AUD", "/aud/value"), m("CNY", "/cny/value"),
+                            m("GOLD18", "/18ayar/value"), m("MESGHAL", "/abshodeh/value", "1000", null),
+                            m("COIN_EMAMI", "/sekkeh/value", "1000", null), m("COIN_BAHAR", "/bahar/value", "1000", null),
+                            m("COIN_HALF", "/nim/value", "1000", null), m("COIN_QUARTER", "/rob/value", "1000", null),
+                            m("COIN_GERAMI", "/gerami/value", "1000", null)),
+                    480, "https://www.navasan.tech", "کلید رایگان را از ربات تلگرام ‎@navasan_contact_bot بگیرید؛ سه ماه اعتبار دارد و تمدید می‌شود.",
+                    "کلید رایگان ۱۲۰ درخواست در ماه دارد و هر دو ساعت به‌روز می‌شود؛ آزمایش و دریافت دستی هم از آن کم می‌کنند. "
+                            + "سکه‌ها و آب‌شده به هزار تومان اعلام می‌شوند و ضریب ۱۰۰۰ دارند. ممکن است از داخل ایران در دسترس نباشد."));
 
     public static List<Preset> all() {
         return ALL;

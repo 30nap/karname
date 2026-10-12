@@ -57,9 +57,18 @@ To keep the history small, an unchanged price is recorded again only every six h
 | Nobitex | Tether, Bitcoin, Ether, Toncoin (Gram) in Rial | No | Built in and switched off at first |
 | Wallex | Tether, Bitcoin, Ether, Toncoin (Gram) in Toman | No | One answer with every market (about 0.5 MB) |
 | Bitpin | Tether, Bitcoin, Ether in Toman | No | If the address stops answering, try `api.bitpin.org` |
+| TGJU | Open-market dollar, euro, pound, dirham, lira, Canadian and Australian dollar, yuan; 18k and 24k gold, melted gold, all five coins; Tether — in Rial | No | The board tgju.org itself reads (`call1.tgju.org/ajax.json`); undocumented, so mirrors `call2`…`call5` make a good backup source |
+| Navasan | The same currencies, 18k gold, melted gold and the five coins, in Toman | Free, from the Telegram bot `@navasan_contact_bot` | A free key allows 120 requests a month (tests and manual fetches count) and is refreshed every two hours, so the preset fetches every 8 hours; coins and melted gold come in thousands of Toman (multiplier 1000); may not answer from inside Iran |
 
-Tether in Toman is a fair stand-in for the open-market dollar; map `USD` to it in a crypto source
-if no currency source is set up, and put that source after a real currency source.
+TGJU and Navasan cover gold, coins and currencies; Nobitex, Wallex and Bitpin cover crypto. With
+one of each and a second source for the units that matter most to you, every unit has a backup
+and a cross-check. Tether in Toman is a fair stand-in for the open-market dollar; map `USD` to it
+in a crypto source if no currency source is set up, and put that source after a real currency
+source.
+
+TGJU quotes some slugs that stopped updating long ago (`usdt-irr` has been frozen since 2020); the
+preset uses the live ones (`crypto-tether-irr`). If you add a slug by hand, check its `ts` in the
+answer.
 
 #### Nobitex
 

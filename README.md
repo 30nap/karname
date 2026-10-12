@@ -48,8 +48,8 @@ The screenshots show the built-in demo data (`KARNAME_DEMO`) and the offline scr
   reached.
 
 **Prices and data**
-- Manual prices, and automatic ones from several sources at once: ready-made (Nobitex, Wallex,
-  Bitpin and more) or any JSON API (Rial or Toman, any field, API keys kept secret). Each price comes
+- Manual prices, and automatic ones from several sources at once: ready-made (TGJU and Navasan
+  for currencies, gold and coins; Nobitex, Wallex and Bitpin for crypto) or any JSON API (Rial or Toman, any field, API keys kept secret). Each price comes
   from the most preferred source with a fresh quote; the others take over when it fails and
   cross-check it, so a misconfigured source (Rial read as Toman) is set aside instead of recorded.
 - CSV export that opens correctly in Excel, bank statement import with column mapping and
