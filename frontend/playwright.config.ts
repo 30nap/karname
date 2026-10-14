@@ -56,6 +56,7 @@ export default defineConfig({
         KARNAME_SECRET_KEY: 'ZTJlLW9ubHktc2VjcmV0LWtleS1mb3ItdGVzdHMtMTI=',
         // no background jobs racing the tests (prices, recurring postings)
         KARNAME_SCHEDULING_ENABLED: 'false',
+        KARNAME_STOCKS_BASE_URL: `http://127.0.0.1:${MOCK_PORT}/tsetmc`,
         ANTHROPIC_API_KEY: '',
       },
     },

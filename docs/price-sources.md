@@ -11,6 +11,28 @@ has prices in Toman over time.
 | Manual | You (or everyone, when the administrator marks it so) | **دارایی‌ها و قیمت‌ها** → a unit → «ثبت قیمت»; any date, for example the day of a purchase |
 | Implied by a purchase | You | Buying 300 dollars for 25,350,000 Toman records 84,500 Toman per dollar on that day |
 | Automatic sources | Everyone | Fetched by the server on a schedule, from several services at once (below) |
+| Iranian securities | You | Link a stock or listed fund to its TSETMC symbol; the server fetches its closing price every 30 minutes |
+
+### Iranian stocks and listed funds
+
+In **دارایی‌ها و قیمت‌ها → واحد جدید → بورس ایران**, search for a symbol or company/fund name,
+select the matching instrument, and create the unit. Use that unit in a **بورس و صندوق** account
+to record the number of shares or fund units you hold. An existing personal security with zero
+decimal places can be linked from its price dialog using **اتصال به نماد بورس**; its accounts,
+balances and transactions are preserved.
+
+The server reads TSETMC's **closing price** (`pClosing`, not the last trade), converts Rial to
+Toman, and keeps the exchange's date and time in `Asia/Tehran`. Repeated responses from a closed
+or suspended market do not make an old price look fresh. A failed request keeps the previous
+price and displays its error. The price dialog also offers an immediate fetch and a way to stop
+automatic fetching while keeping price history. These links and prices belong to the user and
+are included in their existing JSON backup.
+
+No API key or administrator-managed source is needed. The server needs HTTPS access to
+`cdn.tsetmc.com`; scheduled fetching follows `KARNAME_SCHEDULING_ENABLED`. If TSETMC is unavailable
+from the server's network, prices can still be entered manually. For an explicitly configured
+compatible mirror or a test server, the Spring property `karname.stocks.base-url` overrides the
+default `https://cdn.tsetmc.com/api`.
 
 **Which price counts:** for a given moment, the most recent price before it, whichever kind it
 is. A manual price therefore overrides automatic ones until the next fetch is newer; to keep a

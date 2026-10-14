@@ -17,4 +17,8 @@ public interface CommodityRepository extends JpaRepository<Commodity, Long> {
 
     @Query("select c from Commodity c where c.userId is null and c.code = :code")
     Optional<Commodity> findBuiltIn(String code);
+
+    Optional<Commodity> findByUserIdAndStockInstrumentId(Long userId, String stockInstrumentId);
+
+    List<Commodity> findByStockInstrumentIdIsNotNullAndActiveTrue();
 }

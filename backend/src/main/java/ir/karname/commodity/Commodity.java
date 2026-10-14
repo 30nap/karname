@@ -51,6 +51,22 @@ public class Commodity {
     @Column(nullable = false)
     private boolean active = true;
 
+    /** Optional TSETMC instrument bound to this user's security; never a numeric JavaScript value. */
+    @Column(name = "stock_instrument_id", length = 20)
+    private String stockInstrumentId;
+
+    @Column(name = "stock_symbol", length = 50)
+    private String stockSymbol;
+
+    @Column(name = "stock_last_attempt_at")
+    private Instant stockLastAttemptAt;
+
+    @Column(name = "stock_last_success_at")
+    private Instant stockLastSuccessAt;
+
+    @Column(name = "stock_last_error", length = 500)
+    private String stockLastError;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -137,5 +153,49 @@ public class Commodity {
 
     public void setActive(boolean active) {
         this.active = active;
+    }
+
+    public String getStockInstrumentId() {
+        return stockInstrumentId;
+    }
+
+    public void setStockInstrumentId(String stockInstrumentId) {
+        this.stockInstrumentId = stockInstrumentId;
+    }
+
+    public String getStockSymbol() {
+        return stockSymbol;
+    }
+
+    public void setStockSymbol(String stockSymbol) {
+        this.stockSymbol = stockSymbol;
+    }
+
+    public Instant getStockLastAttemptAt() {
+        return stockLastAttemptAt;
+    }
+
+    public void setStockLastAttemptAt(Instant stockLastAttemptAt) {
+        this.stockLastAttemptAt = stockLastAttemptAt;
+    }
+
+    public Instant getStockLastSuccessAt() {
+        return stockLastSuccessAt;
+    }
+
+    public void setStockLastSuccessAt(Instant stockLastSuccessAt) {
+        this.stockLastSuccessAt = stockLastSuccessAt;
+    }
+
+    public String getStockLastError() {
+        return stockLastError;
+    }
+
+    public void setStockLastError(String stockLastError) {
+        this.stockLastError = stockLastError;
+    }
+
+    public long getVersion() {
+        return version;
     }
 }

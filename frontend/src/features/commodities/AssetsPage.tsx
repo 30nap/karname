@@ -23,11 +23,13 @@ import { useAccounts } from '@/features/accounts/api'
 import { useFormat, usePrefs } from '@/app/preferences'
 import { useAuthStatus, useMe } from '@/features/auth/api'
 import { useRunPriceSources } from '@/features/settings/api'
-import type { Commodity, CommodityKind } from '@/lib/api/types'
+import type { Commodity, CommodityKind, SecurityInstrument } from '@/lib/api/types'
 import { fromDisplayAmount, IRT, sumAmounts } from '@/lib/format/money'
 import { todayIso } from '@/lib/jalali'
 import { COMMODITY_KIND_LABELS } from '@/lib/labels'
-import { useCommodities, useDeletePrice, usePriceHistory, useRecordPrice, useSaveCustomCommodity } from './api'
+import { useCommodities, useDeletePrice, usePriceHistory, useRecordPrice, useSaveCustomCommodity, useSaveSecurity } from './api'
+import { SecurityPicker } from './SecurityPicker'
+import { SecurityPricing } from './SecurityPricing'
 
 const KIND_ORDER: CommodityKind[] = ['FIAT', 'GOLD', 'COIN', 'CRYPTO', 'SECURITY', 'PROPERTY', 'VEHICLE', 'OTHER']
 
@@ -51,6 +53,7 @@ function PriceDialog({ commodity, onClose }: { commodity: Commodity; onClose: ()
       </DialogHeader>
       <DialogBody className="grid gap-4">
         {error ? <Alert variant="destructive">{error}</Alert> : null}
+        {commodity.custom && commodity.kind === 'SECURITY' && commodity.scale === 0 ? <SecurityPricing commodity={commodity} /> : null}
         <FormField label={`قیمت هر ${commodity.unitFa}`}>
           <MoneyInput value={value} onChange={setValue} commodity={IRT} autoFocus showQuickButtons />
         </FormField>
@@ -109,6 +112,9 @@ function PriceDialog({ commodity, onClose }: { commodity: Commodity; onClose: ()
 function CustomCommodityDialog({ onClose }: { onClose: () => void }) {
   const f = useFormat()
   const save = useSaveCustomCommodity()
+  const saveSecurity = useSaveSecurity()
+  const [mode, setMode] = useState<'manual' | 'security'>('manual')
+  const [instrument, setInstrument] = useState<SecurityInstrument | null>(null)
   const [name, setName] = useState('')
   const [unit, setUnit] = useState('')
   const [kind, setKind] = useState<CommodityKind>('SECURITY')
@@ -118,10 +124,20 @@ function CustomCommodityDialog({ onClose }: { onClose: () => void }) {
     <DialogContent>
       <DialogHeader>
         <DialogTitle>واحد دارایی جدید</DialogTitle>
-        <DialogDescription>برای سهام، واحد صندوق، ملک، خودرو یا هر دارایی دیگری که در فهرست نیست.</DialogDescription>
+        <DialogDescription>{mode === 'security'
+          ? 'نماد سهام یا صندوق بورسی را انتخاب کنید؛ قیمت پایانی خودکار از TSETMC دریافت و به تومان تبدیل می‌شود.'
+          : 'برای سهام، واحد صندوق، ملک، خودرو یا هر دارایی دیگری که در فهرست نیست.'}</DialogDescription>
       </DialogHeader>
       <DialogBody className="grid gap-4">
         {error ? <Alert variant="destructive">{error}</Alert> : null}
+        <Segmented ariaLabel="روش افزودن دارایی" value={mode} onChange={(value) => { setMode(value); setInstrument(null); setError(null) }}
+          options={[{ value: 'manual', label: 'واحد دلخواه' }, { value: 'security', label: 'بورس ایران' }]} />
+        {mode === 'security' ? (
+          <>
+            <SecurityPicker value={instrument} onChange={setInstrument} />
+            <p className="text-xs text-muted-foreground">پس از افزودن نماد، در بخش حساب‌ها یک حساب «بورس و صندوق» با این واحد بسازید و تعداد دارایی یا خرید و فروش خود را ثبت کنید.</p>
+          </>
+        ) : <>
         <FormField label="نام"><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="مثلاً صندوق طلای عیار" /></FormField>
         <FormField label="واحد شمارش"><Input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="مثلاً واحد، سهم، باب" /></FormField>
         <FormField label="نوع">
@@ -140,13 +156,27 @@ function CustomCommodityDialog({ onClose }: { onClose: () => void }) {
             <SelectContent>{['0', '1', '2', '3', '4', '6', '8'].map((s) => <SelectItem key={s} value={s}>{f.digits(s)}</SelectItem>)}</SelectContent>
           </Select>
         </FormField>
+        </>}
       </DialogBody>
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>انصراف</Button>
-        <Button loading={save.isPending} onClick={() => save.mutate({ nameFa: name, unitFa: unit, kind, scale: Number(scale) }, {
-          onSuccess: () => { toast.success('واحد ساخته شد.'); onClose() },
-          onError: (e) => setError(e.message),
-        })}>ساخت</Button>
+        <Button loading={save.isPending || saveSecurity.isPending} disabled={mode === 'security' && !instrument} onClick={() => {
+          setError(null)
+          if (mode === 'security') {
+            if (!instrument) return
+            saveSecurity.mutate({ instrumentId: instrument.instrumentId }, {
+              onSuccess: (commodity) => {
+                if (commodity.stock?.lastError) toast.warning(`نماد اضافه شد؛ دریافت قیمت انجام نشد: ${commodity.stock.lastError}`)
+                else toast.success('نماد اضافه شد و دریافت خودکار قیمت فعال است.')
+                onClose()
+              },
+              onError: (e) => setError(e.message),
+            })
+          } else save.mutate({ nameFa: name, unitFa: unit, kind, scale: Number(scale) }, {
+            onSuccess: () => { toast.success('واحد ساخته شد.'); onClose() },
+            onError: (e) => setError(e.message),
+          })
+        }}>{mode === 'security' ? 'افزودن نماد' : 'ساخت'}</Button>
       </DialogFooter>
     </DialogContent>
   )
@@ -184,7 +214,9 @@ function CommodityRow({ commodity: c, holding, onSelect }: { commodity: Commodit
         ) : null}
         <span className="block text-xs text-muted-foreground">
           {c.latestPrice ? `هر ${c.unitFa} | ${f.dateTime(c.latestPrice.pricedAt)}` : `هر ${c.unitFa}`}
+          {c.stock ? ` | نماد ${c.stock.symbol} · قیمت خودکار` : ''}
         </span>
+        {c.stock?.lastError ? <span className="mt-1 block text-xs text-destructive">دریافت قیمت نماد ناموفق بود؛ برای جزئیات و تلاش دوباره باز کنید.</span> : null}
       </span>
       <span className="flex shrink-0 items-center gap-2">
         {c.latestPrice?.stale ? <AlertTriangle className="size-4 text-warning" aria-label="قیمت قدیمی" /> : null}
@@ -221,7 +253,8 @@ export function AssetsPage() {
   const admin = useAuthStatus().data?.user?.role === 'ADMIN'
   const { data: commodities, isPending } = useCommodities()
   const { holdings, loaded } = useHoldings()
-  const [selected, setSelected] = useState<Commodity | null>(null)
+  const [selectedCode, setSelectedCode] = useState<string | null>(null)
+  const selected = commodities?.find((c) => c.code === selectedCode) ?? null
   const [customOpen, setCustomOpen] = useState(false)
   const [scopeChoice, setScope] = useState<Scope | null>(null)
   // Until the user picks, show their own assets when they have any.
@@ -230,7 +263,7 @@ export function AssetsPage() {
 
   return (
     <>
-      <PageHeader title="دارایی‌ها و قیمت‌ها" description="قیمت روز ارز، طلا، سکه و رمزارز برای محاسبه‌ی ارزش دارایی‌ها"
+      <PageHeader title="دارایی‌ها و قیمت‌ها" description="قیمت روز ارز، طلا، سکه، رمزارز و بورس برای محاسبه‌ی ارزش دارایی‌ها"
         actions={<>
           {admin ? <RefreshPricesButton /> : null}
           <Button variant="outline" onClick={() => setCustomOpen(true)}><Plus />واحد جدید</Button>
@@ -255,7 +288,7 @@ export function AssetsPage() {
               <Card key={kind}>
                 <CardHeader><CardTitle>{COMMODITY_KIND_LABELS[kind]}</CardTitle></CardHeader>
                 <CardContent className="grid gap-1 p-2 sm:p-3">
-                  {items.map((c) => <CommodityRow key={c.code} commodity={c} holding={holdings.get(c.code)} onSelect={() => setSelected(c)} />)}
+                  {items.map((c) => <CommodityRow key={c.code} commodity={c} holding={holdings.get(c.code)} onSelect={() => setSelectedCode(c.code)} />)}
                 </CardContent>
               </Card>
             )
@@ -263,13 +296,13 @@ export function AssetsPage() {
           <Card>
             <CardHeader>
               <CardTitle>به‌روزرسانی خودکار</CardTitle>
-              <CardDescription>دریافت خودکار قیمت از منابع آنلاین را مدیر سیستم در تنظیمات فعال می‌کند. تا آن موقع قیمت‌ها را دستی ثبت کنید؛ خرید و فروش طلا و ارز با تومان هم قیمت را خودکار ثبت می‌کند.</CardDescription>
+              <CardDescription>برای سهام و صندوق‌های بورس ایران، از «واحد جدید» نماد را انتخاب کنید تا قیمت آن خودکار دریافت شود. دریافت خودکار قیمت ارز، طلا و رمزارز را مدیر سیستم در تنظیمات فعال می‌کند. قیمت دستی و قیمت خرید و فروش با تومان هم برای ارزش‌گذاری ثبت می‌شوند.</CardDescription>
             </CardHeader>
           </Card>
         </div>
       )}
-      <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        {selected ? <PriceDialog commodity={selected} onClose={() => setSelected(null)} /> : null}
+      <Dialog open={!!selected} onOpenChange={(o) => !o && setSelectedCode(null)}>
+        {selected ? <PriceDialog commodity={selected} onClose={() => setSelectedCode(null)} /> : null}
       </Dialog>
       <Dialog open={customOpen} onOpenChange={setCustomOpen}>
         {customOpen ? <CustomCommodityDialog onClose={() => setCustomOpen(false)} /> : null}

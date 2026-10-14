@@ -59,6 +59,19 @@ export interface Commodity {
   scale: number
   custom: boolean
   latestPrice: LatestPrice | null
+  stock?: {
+    instrumentId: string
+    symbol: string
+    lastAttemptAt: string | null
+    lastSuccessAt: string | null
+    lastError: string | null
+  } | null
+}
+
+export interface SecurityInstrument {
+  instrumentId: string
+  symbol: string
+  nameFa: string
 }
 
 export interface PriceRecord {

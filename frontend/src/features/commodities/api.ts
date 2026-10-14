@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { api, query } from '@/lib/api/client'
-import type { Commodity, CommodityKind, PriceRecord } from '@/lib/api/types'
+import type { Commodity, CommodityKind, PriceRecord, SecurityInstrument } from '@/lib/api/types'
 import { invalidateFinance } from '@/features/transactions/invalidate'
 
 export const commoditiesKey = ['commodities'] as const
@@ -62,6 +62,44 @@ export function useDeleteCustomCommodity() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (code: string) => api.delete<void>(`/commodities/${code}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: commoditiesKey }),
+  })
+}
+
+export function useSearchSecurities(term: string | null) {
+  return useQuery({
+    queryKey: ['securities', 'search', term],
+    queryFn: ({ signal }) => api.get<SecurityInstrument[]>(`/securities/search${query({ q: term })}`, { signal }),
+    enabled: !!term && term.length >= 2,
+    staleTime: 5 * 60_000,
+    retry: false,
+  })
+}
+
+export function useSaveSecurity() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ code, instrumentId }: { code?: string; instrumentId: string }) =>
+      code ? api.put<Commodity>(`/commodities/${code}/security`, { instrumentId }) : api.post<Commodity>('/securities', { instrumentId }),
+    meta: { toastError: false },
+    onSuccess: () => invalidateFinance(queryClient),
+  })
+}
+
+export function useRefreshSecurity() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (code: string) => api.post<Commodity>(`/commodities/${code}/security/refresh`),
+    meta: { toastError: false },
+    onSuccess: () => invalidateFinance(queryClient),
+  })
+}
+
+export function useUnlinkSecurity() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (code: string) => api.delete<Commodity>(`/commodities/${code}/security`),
+    meta: { toastError: false },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: commoditiesKey }),
   })
 }

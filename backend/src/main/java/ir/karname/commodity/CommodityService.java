@@ -33,8 +33,11 @@ public class CommodityService {
     public record LatestPriceView(BigDecimal priceToman, Instant pricedAt, String source, boolean personal, boolean stale) {
     }
 
+    public record StockView(String instrumentId, String symbol, Instant lastAttemptAt, Instant lastSuccessAt, String lastError) {
+    }
+
     public record CommodityView(String code, String nameFa, String unitFa, CommodityKind kind, int scale, boolean custom,
-            LatestPriceView latestPrice) {
+            LatestPriceView latestPrice, StockView stock) {
     }
 
     public record CustomCommodityRequest(String nameFa, String unitFa, CommodityKind kind, Integer scale) {
@@ -52,7 +55,9 @@ public class CommodityService {
         if (price != null && !c.isToman()) {
             priceView = new LatestPriceView(price.priceToman(), price.pricedAt(), price.source(), price.personal(), isStale(c, price.pricedAt()));
         }
-        return new CommodityView(c.getCode(), c.getNameFa(), c.getUnitFa(), c.getKind(), c.getScale(), c.isCustom(), priceView);
+        StockView stock = c.getStockInstrumentId() == null ? null : new StockView(c.getStockInstrumentId(), c.getStockSymbol(),
+                c.getStockLastAttemptAt(), c.getStockLastSuccessAt(), c.getStockLastError());
+        return new CommodityView(c.getCode(), c.getNameFa(), c.getUnitFa(), c.getKind(), c.getScale(), c.isCustom(), priceView, stock);
     }
 
     public boolean isStale(Commodity c, Instant pricedAt) {
@@ -100,6 +105,9 @@ public class CommodityService {
     @Transactional
     public Commodity updateCustom(long userId, String code, CustomCommodityRequest request) {
         Commodity commodity = requireOwnCustom(userId, code);
+        if (commodity.getStockInstrumentId() != null && request.kind() != null && request.kind() != CommodityKind.SECURITY) {
+            throw ApiException.badRequest("stock.kindLocked");
+        }
         String name = PersianText.clean(request.nameFa());
         String unit = PersianText.clean(request.unitFa());
         if (name == null || name.length() > 100 || unit == null || unit.length() > 30) {

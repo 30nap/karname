@@ -3,10 +3,27 @@
 import { createServer } from 'node:http'
 
 const port = Number(process.argv[2] ?? 8099)
+const stock = { insCode: '46348559193224090', lVal18AFC: 'فولاد', lVal30: 'فولاد مبارکه اصفهان', flow: 1, lastDate: 1 }
 
 createServer((request, response) => {
   if (request.url === '/health') {
     response.end('ok')
+    return
+  }
+  if (request.url?.startsWith('/tsetmc/')) {
+    response.setHeader('content-type', 'application/json')
+    if (request.url.startsWith('/tsetmc/Instrument/GetInstrumentSearch/')) {
+      response.end(JSON.stringify({ instrumentSearch: [stock] }))
+    } else if (request.url === `/tsetmc/Instrument/GetInstrumentInfo/${stock.insCode}`) {
+      response.end(JSON.stringify({ instrumentInfo: stock }))
+    } else if (request.url === `/tsetmc/ClosingPrice/GetClosingPriceInfo/${stock.insCode}`) {
+      const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10).replaceAll('-', '')
+      response.end(JSON.stringify({ closingPriceInfo: { insCode: '0', pClosing: 35358, pDrCotVal: 35540,
+        dEven: Number(yesterday), hEven: 123000, qTotTran5J: 100 } }))
+    } else {
+      response.statusCode = 404
+      response.end('{}')
+    }
     return
   }
   if (request.url === '/prices.json') {

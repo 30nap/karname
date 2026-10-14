@@ -181,6 +181,41 @@ public class PriceService {
     }
 
     /**
+     * A private stock quote keeps the exchange's timestamp. Polling a closed or suspended market
+     * must not make its old closing price look current or override a newer manual valuation.
+     */
+    @Transactional
+    public boolean recordStockQuote(Commodity commodity, BigDecimal priceToman, Instant quotedAt) {
+        validate(commodity, priceToman);
+        if (!commodity.isCustom() || commodity.getKind() != CommodityKind.SECURITY || commodity.getStockInstrumentId() == null) {
+            throw ApiException.badRequest("stock.securityRequired");
+        }
+        if (quotedAt == null || quotedAt.isAfter(clock.instant())) {
+            throw ApiException.badRequest("price.future");
+        }
+        // Serialize refreshes so the scheduler and a manual refresh cannot duplicate a quote.
+        jdbc.sql("SELECT id FROM commodities WHERE id = :id AND user_id = :userId FOR UPDATE")
+                .param("id", commodity.getId()).param("userId", commodity.getUserId()).query(Long.class).optional()
+                .orElseThrow(() -> ApiException.notFound("commodity.notFound"));
+        BigDecimal price = normalize(priceToman);
+        var latest = jdbc.sql("""
+                        SELECT price_toman, priced_at FROM prices
+                        WHERE commodity_id = :id AND user_id = :userId AND source = 'TSETMC'
+                        ORDER BY priced_at DESC, id DESC LIMIT 1
+                        """)
+                .param("id", commodity.getId()).param("userId", commodity.getUserId())
+                .query((rs, n) -> new Fetched("TSETMC", rs.getBigDecimal(1), rs.getTimestamp(2).toInstant())).optional();
+        if (latest.isPresent()) {
+            Fetched last = latest.get();
+            if (quotedAt.isBefore(last.at()) || quotedAt.equals(last.at()) && price.compareTo(last.price()) == 0) {
+                return false;
+            }
+        }
+        prices.save(new Price(commodity.getId(), commodity.getUserId(), price, quotedAt, "TSETMC", null));
+        return true;
+    }
+
+    /**
      * Thins fetched prices older than {@code keepAll} to the last one of each day (in {@code zone})
      * per commodity and source, so years of half-hourly fetches stay small. Manual and implied
      * prices are never touched. Returns the number of rows removed.
