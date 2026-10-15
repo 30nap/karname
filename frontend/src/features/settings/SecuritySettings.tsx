@@ -10,6 +10,7 @@ import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
 import { useMe } from '@/features/auth/api'
 import { toLatinDigits } from '@/lib/persian/digits'
+import { PASSWORD_LENGTH_HINT, passwordValidationError } from '@/lib/password'
 import {
   useChangePassword,
   useDeleteAccount,
@@ -52,7 +53,8 @@ function PasswordCard() {
 
   const submit = () => {
     setError(null)
-    if (next.length < 8) return setError('رمز جدید باید حداقل ۸ کاراکتر باشد.')
+    const validationError = passwordValidationError(next)
+    if (validationError) return setError(validationError)
     if (next !== confirm) return setError('تکرار رمز جدید یکسان نیست.')
     change.mutate({ currentPassword: current, newPassword: next }, {
       onSuccess: () => {
@@ -73,7 +75,7 @@ function PasswordCard() {
         <FormField label="رمز فعلی">
           <Input type="password" autoComplete="current-password" className="ltr text-start" value={current} onChange={(e) => setCurrent(e.target.value)} />
         </FormField>
-        <FormField label="رمز جدید">
+        <FormField label="رمز جدید" hint={PASSWORD_LENGTH_HINT}>
           <Input type="password" autoComplete="new-password" className="ltr text-start" value={next} onChange={(e) => setNext(e.target.value)} />
         </FormField>
         <FormField label="تکرار رمز جدید">

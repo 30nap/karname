@@ -14,6 +14,7 @@ import { Switch } from '@/components/ui/switch'
 import { useFormat } from '@/app/preferences'
 import { useMe } from '@/features/auth/api'
 import type { AdminUser } from '@/lib/api/types'
+import { PASSWORD_LENGTH_HINT, passwordValidationError } from '@/lib/password'
 import { useAdminUsers, useDeleteAdminUser, useResetUserPassword, useSystemSettings, useUpdateAdminUser, useUpdateSystemSettings } from './api'
 import { PriceSourcesCard } from './PriceSources'
 
@@ -91,13 +92,14 @@ export function AdminSettings() {
         <DialogContent>
           <DialogHeader><DialogTitle>رمز جدید برای {resetTarget?.displayName}</DialogTitle></DialogHeader>
           <DialogBody>
-            <FormField label="رمز جدید" hint="حداقل ۸ کاراکتر. کاربر از همه‌ی دستگاه‌ها خارج می‌شود.">
+            <FormField label="رمز جدید" hint={`${PASSWORD_LENGTH_HINT} کاربر از همه‌ی دستگاه‌ها خارج می‌شود.`}
+              error={newPassword ? passwordValidationError(newPassword) : undefined}>
               <Input type="text" className="ltr text-start" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
             </FormField>
           </DialogBody>
           <DialogFooter>
             <Button variant="outline" onClick={() => setResetTarget(null)}>انصراف</Button>
-            <Button disabled={newPassword.length < 8} loading={resetPassword.isPending} onClick={() => resetTarget && resetPassword.mutate(
+            <Button disabled={!!passwordValidationError(newPassword)} loading={resetPassword.isPending} onClick={() => resetTarget && resetPassword.mutate(
               { id: resetTarget.id, newPassword }, { onSuccess: () => { toast.success('رمز تغییر کرد.'); setResetTarget(null) } })}>
               ذخیره
             </Button>

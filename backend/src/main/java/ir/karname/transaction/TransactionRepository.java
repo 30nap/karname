@@ -13,6 +13,8 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
 
     Optional<Transaction> findByUserIdAndExternalRef(long userId, String externalRef);
 
+    Optional<Transaction> findFirstByUserIdAndAccountIdAndTypeOrderByIdAsc(long userId, long accountId, TransactionType type);
+
     /** Transactions created for one source record, e.g. every payment of a loan ("loan:12:"). */
     List<Transaction> findByUserIdAndExternalRefStartingWith(long userId, String prefix);
 }

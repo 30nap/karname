@@ -164,6 +164,79 @@ class BackupIntegrationTest extends FinanceTestSupport {
     }
 
     @Test
+    void deletedRecurringRulesKeepTheirPostedHistoryAfterRestore() throws Exception {
+        TestUser user = createUser("sina");
+        Account bank = bank(user, "ملت", "50000000");
+        long deletedRule = created(user, "/api/v1/recurring", Map.of("name", "اجاره قدیمی", "type", "EXPENSE",
+                "accountId", bank.getId(), "amount", "1000000", "frequency", "MONTHLY", "dayOfMonth", 3,
+                "startDate", "2026-08-25", "mode", "REMIND"));
+        for (String date : List.of("2026-08-25", "2026-09-25")) {
+            mvc.perform(postAs(user, "/api/v1/recurring/{id}/occurrences/{date}/post", Map.of(), deletedRule, date))
+                    .andExpect(status().isOk());
+        }
+        mvc.perform(deleteAs(user, "/api/v1/recurring/{id}", deletedRule)).andExpect(status().isNoContent());
+        long liveRule = created(user, "/api/v1/recurring", Map.of("name", "اجاره فعلی", "type", "EXPENSE",
+                "accountId", bank.getId(), "amount", "2000000", "frequency", "MONTHLY", "dayOfMonth", 3,
+                "startDate", "2026-09-25", "mode", "REMIND"));
+        mvc.perform(postAs(user, "/api/v1/recurring/{id}/occurrences/2026-09-25/post", Map.of(), liveRule))
+                .andExpect(status().isOk());
+        List<String> before = fingerprint(user);
+        String backup = get(user, "/api/v1/io/backup");
+        assertThat(backup).contains("rec:" + deletedRule + ":2026-08-25");
+
+        mvc.perform(restore(user, backup).param("confirm", "REPLACE")).andExpect(status().isOk());
+        assertThat(fingerprint(user)).isEqualTo(before);
+        JsonNode restoredRules = readJson(get(user, "/api/v1/recurring"));
+        long restoredRuleId = restoredRules.get(0).get("id").asLong();
+        JsonNode restoredTransactions = readJson(get(user, "/api/v1/io/backup")).get("tables").get("transactions");
+        int detached = 0;
+        int linked = 0;
+        for (JsonNode transaction : restoredTransactions) {
+            if (transaction.get("source").asString().equals("RECURRING")) {
+                if (transaction.get("external_ref").isNull()) {
+                    detached++;
+                } else {
+                    assertThat(transaction.get("external_ref").asString()).isEqualTo("rec:" + restoredRuleId + ":2026-09-25");
+                    linked++;
+                }
+            }
+        }
+        assertThat(detached).isEqualTo(2);
+        assertThat(linked).isEqualTo(1);
+        // A subsequent export/restore also preserves the detached transactions.
+        mvc.perform(restore(user, get(user, "/api/v1/io/backup")).param("confirm", "REPLACE")).andExpect(status().isOk());
+        assertThat(fingerprint(user)).isEqualTo(before);
+    }
+
+    @Test
+    void deletedLoanSchedulesKeepTheirAccountAndPaymentHistoryAfterRestore() throws Exception {
+        TestUser user = createUser("sina");
+        Account bank = bank(user, "ملت", "50000000");
+        long loan = created(user, "/api/v1/loans", Map.of("name", "وام خودرو", "principal", "100000000", "annualRate", "18",
+                "termMonths", 36, "firstDueDate", "2026-09-22", "start", "NEW", "depositAccountId", bank.getId(),
+                "receivedOn", "2026-08-23", "paymentAccountId", bank.getId()));
+        mvc.perform(postAs(user, "/api/v1/loans/{id}/installments/1/payment", Map.of(), loan)).andExpect(status().isOk());
+        mvc.perform(deleteAs(user, "/api/v1/loans/{id}?withAccount=false", loan)).andExpect(status().isNoContent());
+        List<String> before = fingerprint(user);
+        String backup = get(user, "/api/v1/io/backup");
+        assertThat(backup).contains("loan:" + loan + ":");
+
+        mvc.perform(restore(user, backup).param("confirm", "REPLACE")).andExpect(status().isOk());
+        assertThat(fingerprint(user)).isEqualTo(before);
+        JsonNode restored = readJson(get(user, "/api/v1/io/backup")).get("tables");
+        assertThat(restored.get("loans").size()).isZero();
+        assertThat(restored.get("accounts").size()).isEqualTo(2);
+        int detached = 0;
+        for (JsonNode transaction : restored.get("transactions")) {
+            if (transaction.get("source").asString().equals("LOAN")) {
+                assertThat(transaction.get("external_ref").isNull()).isTrue();
+                detached++;
+            }
+        }
+        assertThat(detached).isEqualTo(3); // disbursement, principal payment, interest expense
+    }
+
+    @Test
     void aBadFileChangesNothing() throws Exception {
         TestUser user = createUser("sina");
         seed(user);

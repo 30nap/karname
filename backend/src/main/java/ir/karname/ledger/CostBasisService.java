@@ -77,10 +77,12 @@ public class CostBasisService {
                 JOIN accounts a ON a.id = t.account_id
                 LEFT JOIN accounts ta ON ta.id = t.to_account_id
                 WHERE t.user_id = :userId AND (t.account_id = :accountId OR t.to_account_id = :accountId)
+                  AND t.occurred_on <= :today
                 ORDER BY t.occurred_on, t.id
                 """)
                 .param("userId", userId)
                 .param("accountId", accountId)
+                .param("today", LocalDate.now(clock))
                 .query((rs, n) -> new Row(rs.getString(1), rs.getDate(2).toLocalDate(), rs.getLong(3), rs.getBigDecimal(4),
                         (Long) rs.getObject(5), rs.getBigDecimal(6), rs.getBigDecimal(7), rs.getLong(8), (Long) rs.getObject(9)))
                 .list();

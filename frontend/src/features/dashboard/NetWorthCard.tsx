@@ -64,11 +64,11 @@ function Allocation({ slices }: { slices: NetWorth['allocation'] }) {
       </div>
       <ul className="grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
         {sorted.map((s) => (
-          <li key={s.assetClass} className="flex items-center gap-2">
+          <li key={s.assetClass} className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-[360px]:flex-nowrap">
             <span className="size-2.5 shrink-0 rounded-[3px]" style={{ background: chartColor(ASSET_CLASS_SLOT[s.assetClass]) }} aria-hidden />
             <span className="min-w-0 flex-1 truncate">{ASSET_CLASS_LABELS[s.assetClass]}</span>
             <span className="tabular w-12 text-end text-muted-foreground">{f.percent(Number(s.share), 1)}</span>
-            <Amount value={s.valueToman} compact className="tabular w-28 text-end text-muted-foreground" />
+            <Amount value={s.valueToman} compact className="tabular w-full text-end text-muted-foreground min-[360px]:w-auto min-[360px]:min-w-28 min-[360px]:shrink-0" />
           </li>
         ))}
       </ul>
@@ -88,7 +88,7 @@ export function NetWorthCard({ netWorth }: { netWorth: NetWorth }) {
   const hasLiabilities = Number(netWorth.liabilitiesToman) > 0
   return (
     <Card>
-      <CardContent className="grid gap-5 p-5 sm:p-6">
+      <CardContent className="grid grid-cols-1 gap-5 p-5 sm:p-6">
         <div className="grid gap-2">
           <p className="text-sm font-medium text-muted-foreground">دارایی خالص</p>
           <HeroFigure value={netWorth.totalToman} />
@@ -109,7 +109,7 @@ export function NetWorthCard({ netWorth }: { netWorth: NetWorth }) {
           ) : null}
         </div>
 
-        <div className="grid grid-cols-2 gap-4 border-t pt-4">
+        <div className="grid grid-cols-1 gap-4 border-t pt-4 min-[400px]:grid-cols-2">
           <div>
             <p className="text-xs text-muted-foreground">دارایی‌ها</p>
             <Amount value={netWorth.assetsToman} className="text-lg font-semibold" />

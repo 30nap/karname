@@ -148,9 +148,13 @@ public class LoanService {
             }
             deposit = tomanAccount(userId, r.depositAccountId(), "loan.depositAccountToman");
         }
-        BigDecimal opening = mode == StartMode.EXISTING ? (paidBefore == 0 ? r.principal() : lines.get(paidBefore - 1).balanceAfter()) : null;
+        BigDecimal opening = mode == StartMode.EXISTING ? openingBalance(r.principal(), paidBefore, lines) : null;
         Account account = accounts.create(userId, new AccountRequest(r.name(), AccountType.LOAN, Commodity.TOMAN, r.bank(), null,
                 r.counterparty(), null, true, null, opening, opening == null ? null : LocalDate.now(clock)));
+        if (opening != null && opening.signum() == 0) {
+            // Account creation skips zero balances; retain the entry so later term corrections can update it.
+            transactionService.createOpening(userId, account.getId(), BigDecimal.ZERO, LocalDate.now(clock));
+        }
 
         Loan loan = new Loan(userId, account.getId());
         applyTerms(loan, r, method, paidBefore);
@@ -178,6 +182,14 @@ public class LoanService {
         }
         List<LoanSchedule.Line> lines = LoanSchedule.schedule(r.principal(), r.annualRate(), r.termMonths(), method, r.installmentAmount(),
                 r.firstDueDate());
+        if (payments(userId, loan).keySet().stream().anyMatch(number -> number > r.termMonths()
+                || (paidBefore != loan.getPaidBefore() && number <= paidBefore))) {
+            throw ApiException.conflict("loan.paidScheduleConflict");
+        }
+        BigDecimal previousOpening = openingBalance(loan.getPrincipal(), loan.getPaidBefore(),
+                LoanSchedule.schedule(loan.getPrincipal(), loan.getAnnualRate(), loan.getTermMonths(), loan.getMethod(),
+                        loan.getInstallmentAmount(), loan.getFirstDueDate()));
+        BigDecimal correctedOpening = openingBalance(r.principal(), paidBefore, lines);
         Account account = accounts.require(userId, loan.getAccountId());
         accounts.update(userId, account.getId(), new AccountRequest(r.name(), AccountType.LOAN, null, r.bank(), account.getIdentifierHints(),
                 r.counterparty(), account.getIcon(), account.isIncludeInNetWorth(), account.getNotes(), null, null));
@@ -194,7 +206,25 @@ public class LoanService {
                     new TransactionRequest(TransactionType.TRANSFER, tx.getOccurredOn(), tx.getAccountId(), r.principal(), tx.getToAccountId(), null,
                             null, null, tx.getDescription(), tx.getNotes(), tx.getTags())));
         }
+        if (previousOpening.compareTo(correctedOpening) != 0
+                && !transactions.existsByUserIdAndExternalRef(userId, disbursementRef(loan))) {
+            transactions.findFirstByUserIdAndAccountIdAndTypeOrderByIdAsc(userId, account.getId(), TransactionType.OPENING)
+                    .ifPresentOrElse(tx -> transactionService.update(userId, tx.getId(),
+                            new TransactionRequest(TransactionType.OPENING, tx.getOccurredOn(), account.getId(), correctedOpening,
+                                    null, null, null, null, tx.getDescription(), tx.getNotes(), tx.getTags())), () -> {
+                        // Earlier versions omitted zero openings. Do not recreate a nonzero entry the user deleted.
+                        if (previousOpening.signum() == 0) {
+                            transactionService.createOpening(userId, account.getId(), correctedOpening.negate(),
+                                    loan.getCreatedAt().atZone(clock.getZone()).toLocalDate());
+                        }
+                    });
+            transactions.flush(); // BalanceService reads the ledger through JDBC in the response below.
+        }
         return view(userId, loan, true);
+    }
+
+    private static BigDecimal openingBalance(BigDecimal principal, int paidBefore, List<LoanSchedule.Line> lines) {
+        return paidBefore == 0 ? principal : lines.get(paidBefore - 1).balanceAfter();
     }
 
     /**

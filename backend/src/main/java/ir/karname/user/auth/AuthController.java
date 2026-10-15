@@ -4,6 +4,7 @@ import ir.karname.common.persian.PersianText;
 import ir.karname.common.security.KarnamePrincipal;
 import ir.karname.common.web.ApiException;
 import ir.karname.user.SystemSettingsService;
+import ir.karname.user.PasswordPolicy;
 import ir.karname.user.TwoFactorService;
 import ir.karname.user.User;
 import ir.karname.user.UserRepository;
@@ -67,12 +68,12 @@ public class AuthController {
         this.dummyHash = passwordEncoder.encode(java.util.UUID.randomUUID().toString());
     }
 
-    public record LoginRequest(@NotBlank @Size(max = 64) String username, @NotBlank @Size(max = 128) String password,
+    public record LoginRequest(@NotBlank @Size(max = 64) String username, @NotBlank String password,
             @Size(max = 32) String totpCode, boolean rememberMe) {
     }
 
     public record RegisterRequest(@NotBlank @Size(max = 32) String username, @Size(max = 100) String displayName,
-            @NotBlank @Size(max = 128) String password, boolean rememberMe) {
+            @NotBlank String password, boolean rememberMe) {
     }
 
     public record AuthStatus(boolean authenticated, boolean registrationOpen, boolean hasUsers, MeView user) {
@@ -108,7 +109,7 @@ public class AuthController {
         rateLimiter.checkLogin(username, ip);
 
         User user = users.findByUsername(username).orElse(null);
-        boolean passwordOk = passwordEncoder.matches(request.password(), user != null ? user.getPasswordHash() : dummyHash);
+        boolean passwordOk = PasswordPolicy.matches(passwordEncoder, request.password(), user != null ? user.getPasswordHash() : dummyHash);
         if (user == null || !passwordOk || !user.isEnabled()) {
             rateLimiter.recordFailure(username, ip);
             // one answer for all three: a distinct one for disabled accounts would confirm the password

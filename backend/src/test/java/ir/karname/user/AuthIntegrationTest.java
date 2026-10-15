@@ -4,10 +4,13 @@ import ir.karname.support.AbstractIntegrationTest;
 import ir.karname.support.TestUser;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.util.Map;
+import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static ir.karname.support.AbstractIntegrationTest.xsrf;
@@ -69,6 +72,56 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
         assertThat(readJson(weak.getResponse().getContentAsString()).get("code").asString()).isEqualTo("auth.weakPassword");
         assertThat(register("سینا", PASSWORD).getResponse().getStatus()).isEqualTo(400);
         assertThat(register("ab", PASSWORD).getResponse().getStatus()).isEqualTo(400);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"a", "م", "🔐"})
+    void registersAndLogsInAtTheUtf8PasswordLimit(String character) throws Exception {
+        String password = character.repeat(72 / character.getBytes(StandardCharsets.UTF_8).length);
+        assertThat(register("sina", password).getResponse().getStatus()).isEqualTo(201);
+        assertThat(login("sina", password).getResponse().getStatus()).isEqualTo(200);
+
+        MvcResult tooLong = register("reza", password + character);
+        assertThat(tooLong.getResponse().getStatus()).isEqualTo(400);
+        assertThat(readJson(tooLong.getResponse().getContentAsString()).get("code").asString())
+                .isEqualTo("auth.passwordTooLong");
+        assertThat(readJson(tooLong.getResponse().getContentAsString()).get("detail").asString())
+                .contains("۷۲ بایت");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"a", "م", "🔐"})
+    void passwordChangesAndAdminResetsRejectOversizePasswordsWithoutChangingTheOldOne(String character) throws Exception {
+        TestUser admin = createUser("admin");
+        TestUser user = createUser("sina");
+        String password = character.repeat(72 / character.getBytes(StandardCharsets.UTF_8).length + 1);
+        mvc.perform(putAs(user, "/api/v1/me/password", Map.of("currentPassword", PASSWORD, "newPassword", password)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("auth.passwordTooLong"));
+        mvc.perform(postAs(admin, "/api/v1/admin/users/{id}/reset-password", Map.of("newPassword", password), user.id()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("auth.passwordTooLong"));
+        assertThat(login("sina", PASSWORD).getResponse().getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    void oversizedPasswordChecksAreOrdinaryFailuresAndCountTowardLoginLockout() throws Exception {
+        TestUser user = createUser("sina");
+        String oversized = "م".repeat(129);
+        MvcResult missing = login("nobody", oversized);
+        assertThat(missing.getResponse().getStatus()).isEqualTo(401);
+        assertThat(readJson(missing.getResponse().getContentAsString()).get("code").asString())
+                .isEqualTo("auth.invalidCredentials");
+        for (int i = 0; i < 5; i++) {
+            MvcResult failed = login("sina", oversized);
+            assertThat(failed.getResponse().getStatus()).isEqualTo(401);
+            assertThat(readJson(failed.getResponse().getContentAsString()).get("code").asString())
+                    .isEqualTo("auth.invalidCredentials");
+        }
+        assertThat(login("sina", PASSWORD).getResponse().getStatus()).isEqualTo(429);
+        mvc.perform(putAs(user, "/api/v1/me/password", Map.of("currentPassword", oversized, "newPassword", "another-pass")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("auth.wrongPassword"));
     }
 
     @Test

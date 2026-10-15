@@ -331,11 +331,11 @@ public class BackupService {
         if (!m.matches()) {
             return ref;
         }
-        Long id = ids.get(REF_TABLES.get(m.group(1))).get(Long.parseLong(m.group(2)));
-        if (id == null) {
-            throw ApiException.badRequest("backup.invalidReference", "transactions.external_ref");
-        }
-        return m.group(1) + ":" + id + m.group(3);
+        Long id = ids.get(REF_TABLES.get(m.group(1))).get(asLong(m.group(2), "transactions.external_ref"));
+        // Deleting a rule or a loan's schedule intentionally keeps its posted transactions.
+        // Their old reference is a soft link, not a required foreign key. Detach it on restore:
+        // retaining its old id could attach this history to an unrelated, newly assigned id.
+        return id == null ? null : m.group(1) + ":" + id + m.group(3);
     }
 
     private static Long oldId(Map<String, Object> row, Table table) {

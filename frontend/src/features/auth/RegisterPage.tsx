@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
 import { toLatinDigits } from '@/lib/persian/digits'
+import { PASSWORD_LENGTH_HINT, passwordValidationError } from '@/lib/password'
 import { AuthLayout } from './AuthLayout'
 import { useAuthStatus, useRegister } from './api'
 
@@ -19,7 +20,10 @@ const schema = z
       .trim()
       .transform((v) => toLatinDigits(v).toLowerCase())
       .pipe(z.string().regex(/^[a-z0-9][a-z0-9_.-]{2,31}$/, 'نام کاربری باید ۳ تا ۳۲ کاراکتر و فقط حروف انگلیسی، عدد، نقطه، خط تیره یا زیرخط باشد.')),
-    password: z.string().min(8, 'رمز عبور باید حداقل ۸ کاراکتر باشد.').max(128, 'رمز عبور طولانی است.'),
+    password: z.string().superRefine((value, ctx) => {
+      const message = passwordValidationError(value)
+      if (message) ctx.addIssue({ code: 'custom', message })
+    }),
     confirm: z.string(),
   })
   .refine((v) => v.password === v.confirm, { path: ['confirm'], message: 'تکرار رمز عبور یکسان نیست.' })
@@ -63,7 +67,7 @@ export function RegisterPage() {
         <FormField label="نام کاربری" error={errors.username?.message} hint="با حروف انگلیسی؛ برای ورود استفاده می‌شود.">
           <Input autoComplete="username" autoCapitalize="none" spellCheck={false} className="ltr text-start" {...form.register('username')} />
         </FormField>
-        <FormField label="رمز عبور" error={errors.password?.message}>
+        <FormField label="رمز عبور" error={errors.password?.message} hint={PASSWORD_LENGTH_HINT}>
           <Input type="password" autoComplete="new-password" className="ltr text-start" {...form.register('password')} />
         </FormField>
         <FormField label="تکرار رمز عبور" error={errors.confirm?.message}>

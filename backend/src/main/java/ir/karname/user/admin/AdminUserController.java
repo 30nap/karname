@@ -10,7 +10,6 @@ import ir.karname.user.UserService;
 import ir.karname.user.UserViews.AdminUserView;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -47,7 +46,7 @@ public class AdminUserController {
     public record UserUpdateRequest(Boolean enabled, Role role) {
     }
 
-    public record PasswordResetRequest(@NotBlank @Size(max = 128) String newPassword) {
+    public record PasswordResetRequest(@NotBlank String newPassword) {
     }
 
     public record SystemSettingsView(boolean registrationOpen) {

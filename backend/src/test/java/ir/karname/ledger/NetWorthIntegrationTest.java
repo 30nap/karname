@@ -7,6 +7,7 @@ import ir.karname.support.TestUser;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.time.Duration;
 
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -92,6 +93,54 @@ class NetWorthIntegrationTest extends FinanceTestSupport {
                 .andExpect(jsonPath("$.unrealizedToman").value("25000000"))
                 .andExpect(jsonPath("$.costComplete").value(true));
         mvc.perform(getAs(user, "/api/v1/accounts/{id}/cost-basis", bank.getId())).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void futureIncomeIsExcludedFromCostBasisUntilItsDateInTehran() throws Exception {
+        TestUser user = createUser("sina");
+        Account dollars = account(user, "دلار", AccountType.CURRENCY, "USD", null);
+        globalPrice("USD", "100000", clock.instant());
+        income(user, dollars, "100", TODAY.plusDays(1), null, "درآمد فردا");
+
+        mvc.perform(getAs(user, "/api/v1/accounts/{id}", dollars.getId()))
+                .andExpect(jsonPath("$.balance").value("0"));
+        mvc.perform(getAs(user, "/api/v1/accounts/{id}/cost-basis", dollars.getId()))
+                .andExpect(jsonPath("$.quantity").value("0"))
+                .andExpect(jsonPath("$.costBasisToman").value("0"))
+                .andExpect(jsonPath("$.marketValueToman").value("0"));
+
+        // Midnight in Tehran is still the previous UTC day.
+        clock.setInstant(Instant.parse("2026-10-06T20:30:00Z"));
+        mvc.perform(getAs(user, "/api/v1/accounts/{id}", dollars.getId()))
+                .andExpect(jsonPath("$.balance").value("100"));
+        mvc.perform(getAs(user, "/api/v1/accounts/{id}/cost-basis", dollars.getId()))
+                .andExpect(jsonPath("$.quantity").value("100"))
+                .andExpect(jsonPath("$.costBasisToman").value("10000000"))
+                .andExpect(jsonPath("$.marketValueToman").value("10000000"));
+    }
+
+    @Test
+    void futurePurchasesAndSalesDoNotChangeTodaysHoldingOrProfit() throws Exception {
+        TestUser user = createUser("sina");
+        Account bank = bank(user, "ملت", "500000000");
+        Account coins = account(user, "سکه", AccountType.GOLD, "COIN_EMAMI", null);
+        transfer(user, bank, coins, "80000000", "1", TODAY);
+        transfer(user, bank, coins, "90000000", "1", TODAY.plusDays(1));
+        transfer(user, coins, bank, "1", "100000000", TODAY.plusDays(2));
+        globalPrice("COIN_EMAMI", "110000000", clock.instant());
+
+        mvc.perform(getAs(user, "/api/v1/accounts/{id}/cost-basis", coins.getId()))
+                .andExpect(jsonPath("$.quantity").value("1"))
+                .andExpect(jsonPath("$.costBasisToman").value("80000000"))
+                .andExpect(jsonPath("$.marketValueToman").value("110000000"))
+                .andExpect(jsonPath("$.realizedToman").value("0"))
+                .andExpect(jsonPath("$.unrealizedToman").value("30000000"));
+
+        clock.advance(Duration.ofDays(2));
+        mvc.perform(getAs(user, "/api/v1/accounts/{id}/cost-basis", coins.getId()))
+                .andExpect(jsonPath("$.quantity").value("1"))
+                .andExpect(jsonPath("$.costBasisToman").value("85000000"))
+                .andExpect(jsonPath("$.realizedToman").value("15000000"));
     }
 
     @Test

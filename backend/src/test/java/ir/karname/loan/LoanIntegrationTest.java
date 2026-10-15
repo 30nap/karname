@@ -6,6 +6,7 @@ import ir.karname.support.FinanceTestSupport;
 import ir.karname.support.TestUser;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -115,6 +116,149 @@ class LoanIntegrationTest extends FinanceTestSupport {
         mvc.perform(postAs(user, "/api/v1/loans/{id}/installments/5/payment", Map.of("accountId", bank.getId()), id))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("loan.paidBefore"));
+    }
+
+    @Test
+    void correctingExistingPrincipalKeepsOpeningDateAndRecordedPayments() throws Exception {
+        TestUser user = createUser("sina");
+        Account bank = bank(user, "ملت", "5000000");
+        Map<String, Object> body = loan("1200000", "0", 12, "2026-08-06");
+        body.put("start", "EXISTING");
+        body.put("paidBefore", 2);
+        long id = create(user, body);
+        String json = mvc.perform(postAs(user, "/api/v1/loans/{id}/installments/3/payment", Map.of("accountId", bank.getId()), id))
+                .andExpect(jsonPath("$.outstanding").value("900000"))
+                .andReturn().getResponse().getContentAsString();
+        long accountId = readJson(json).get("accountId").asLong();
+
+        clock.setInstant(clock.instant().plus(Duration.ofDays(5)));
+        body.put("principal", "2400000");
+        mvc.perform(putAs(user, "/api/v1/loans/{id}", body, id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outstanding").value("1900000"))
+                .andExpect(jsonPath("$.installments[2].amount").value("200000"))
+                .andExpect(jsonPath("$.installments[2].paidAmount").value("100000"))
+                .andExpect(jsonPath("$.installments[2].paidOn").value("2026-10-06"))
+                .andExpect(jsonPath("$.installments[2].status").value("PAID"));
+        mvc.perform(getAs(user, "/api/v1/accounts/{id}", accountId)).andExpect(jsonPath("$.balance").value("-1900000"));
+        mvc.perform(getAs(user, "/api/v1/accounts/{id}", bank.getId())).andExpect(jsonPath("$.balance").value("4900000"));
+        mvc.perform(getAs(user, "/api/v1/transactions?accountId={id}&type=OPENING", accountId))
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.items[0].amount").value("-2000000"))
+                .andExpect(jsonPath("$.items[0].date").value("2026-10-06"));
+    }
+
+    @Test
+    void correctingPaidBeforeAndTermsRecalculatesExistingOpening() throws Exception {
+        TestUser user = createUser("sina");
+        Map<String, Object> body = loan("1200000", "0", 12, "2026-06-06");
+        body.put("start", "EXISTING");
+        body.put("paidBefore", 2);
+        long id = create(user, body);
+
+        body.put("paidBefore", 4);
+        mvc.perform(putAs(user, "/api/v1/loans/{id}", body, id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outstanding").value("800000"))
+                .andExpect(jsonPath("$.paidCount").value(4));
+        body.put("termMonths", 24);
+        mvc.perform(putAs(user, "/api/v1/loans/{id}", body, id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outstanding").value("1000000"))
+                .andExpect(jsonPath("$.installments[4].amount").value("50000"));
+        body.put("paidBefore", 1);
+        mvc.perform(putAs(user, "/api/v1/loans/{id}", body, id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outstanding").value("1150000"));
+    }
+
+    @Test
+    void zeroOpeningCanBeCorrectedAndLegacyMissingZeroOpeningIsReconstructed() throws Exception {
+        TestUser user = createUser("sina");
+        Map<String, Object> body = loan("1200000", "0", 12, "2026-07-06");
+        body.put("start", "EXISTING");
+        body.put("paidBefore", 2);
+        body.put("installmentAmount", "600000");
+        long id = create(user, body);
+        String json = mvc.perform(getAs(user, "/api/v1/loans/{id}", id))
+                .andExpect(jsonPath("$.outstanding").value("0"))
+                .andReturn().getResponse().getContentAsString();
+        long accountId = readJson(json).get("accountId").asLong();
+        mvc.perform(getAs(user, "/api/v1/transactions?accountId={id}&type=OPENING", accountId))
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.items[0].amount").value("0"));
+        body.put("principal", "2400000");
+        mvc.perform(putAs(user, "/api/v1/loans/{id}", body, id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outstanding").value("1200000"));
+
+        body.put("principal", "1200000");
+        long legacyId = create(user, body);
+        // Earlier versions created no opening transaction for an already settled principal.
+        jdbc.sql("DELETE FROM transactions WHERE account_id = (SELECT account_id FROM loans WHERE id = ?) AND type = 'OPENING'")
+                .param(legacyId).update();
+        jdbc.sql("UPDATE loans SET created_at = '2026-09-06T20:30:00Z' WHERE id = ?").param(legacyId).update();
+        body.put("principal", "2400000");
+        json = mvc.perform(putAs(user, "/api/v1/loans/{id}", body, legacyId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outstanding").value("1200000"))
+                .andReturn().getResponse().getContentAsString();
+        long legacyAccountId = readJson(json).get("accountId").asLong();
+        mvc.perform(getAs(user, "/api/v1/transactions?accountId={id}&type=OPENING", legacyAccountId))
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.items[0].amount").value("-1200000"))
+                .andExpect(jsonPath("$.items[0].date").value("2026-09-07"));
+    }
+
+    @Test
+    void correctingNewLoanUpdatesDisbursementWithoutAddingOpeningBalance() throws Exception {
+        TestUser user = createUser("sina");
+        Account bank = bank(user, "ملت", "5000000");
+        Map<String, Object> body = loan("1200000", "0", 12, "2026-10-22");
+        body.put("start", "NEW");
+        body.put("depositAccountId", bank.getId());
+        body.put("receivedOn", "2026-09-01");
+        long id = create(user, body);
+        mvc.perform(postAs(user, "/api/v1/loans/{id}/installments/1/payment", Map.of("accountId", bank.getId()), id))
+                .andExpect(status().isOk());
+        body.put("principal", "2400000");
+        String json = mvc.perform(putAs(user, "/api/v1/loans/{id}", body, id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outstanding").value("2300000"))
+                .andExpect(jsonPath("$.installments[0].paidAmount").value("100000"))
+                .andReturn().getResponse().getContentAsString();
+        long accountId = readJson(json).get("accountId").asLong();
+        mvc.perform(getAs(user, "/api/v1/accounts/{id}", bank.getId())).andExpect(jsonPath("$.balance").value("7300000"));
+        mvc.perform(getAs(user, "/api/v1/transactions?accountId={id}&type=OPENING", accountId))
+                .andExpect(jsonPath("$.total").value(0));
+        mvc.perform(getAs(user, "/api/v1/transactions?accountId={id}&from=2026-09-01&to=2026-09-01", accountId))
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.items[0].amount").value("2400000"));
+    }
+
+    @Test
+    void termCorrectionsCannotHideRecordedPaymentsOrCountThemTwice() throws Exception {
+        TestUser user = createUser("sina");
+        Account bank = bank(user, "ملت", "5000000");
+        Map<String, Object> body = loan("1200000", "0", 12, "2026-08-06");
+        body.put("start", "EXISTING");
+        long id = create(user, body);
+        mvc.perform(postAs(user, "/api/v1/loans/{id}/installments/3/payment", Map.of("accountId", bank.getId()), id))
+                .andExpect(status().isOk());
+        body.put("paidBefore", 3);
+        mvc.perform(putAs(user, "/api/v1/loans/{id}", body, id))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("loan.paidScheduleConflict"));
+        body.put("paidBefore", 0);
+        body.put("termMonths", 2);
+        mvc.perform(putAs(user, "/api/v1/loans/{id}", body, id))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("loan.paidScheduleConflict"));
+        mvc.perform(getAs(user, "/api/v1/loans/{id}", id))
+                .andExpect(jsonPath("$.outstanding").value("1100000"))
+                .andExpect(jsonPath("$.paidBefore").value(0))
+                .andExpect(jsonPath("$.installments.length()").value(12))
+                .andExpect(jsonPath("$.installments[2].status").value("PAID"));
     }
 
     @Test

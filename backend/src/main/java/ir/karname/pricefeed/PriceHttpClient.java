@@ -98,7 +98,7 @@ class PriceHttpClient {
             if (e.getCause() instanceof RuntimeException runtime) {
                 throw runtime;
             }
-            throw new PriceFetchException("اتصال به سرویس برقرار نشد (" + e.getCause().getClass().getSimpleName() + ").", e.getCause());
+            throw new PriceFetchException("ارتباط با سرویس قیمت برقرار نشد؛ کمی بعد دوباره تلاش کنید.", e.getCause());
         }
     }
 
@@ -146,7 +146,7 @@ class PriceHttpClient {
         } catch (SSLException e) {
             throw new PriceFetchException("اتصال امن (TLS) به سرویس برقرار نشد.", e);
         } catch (IOException e) {
-            throw new PriceFetchException("اتصال به سرویس برقرار نشد (" + e.getClass().getSimpleName() + ").", e);
+            throw new PriceFetchException("ارتباط با سرویس قیمت برقرار نشد؛ کمی بعد دوباره تلاش کنید.", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new PriceFetchException("دریافت قیمت متوقف شد.", e);

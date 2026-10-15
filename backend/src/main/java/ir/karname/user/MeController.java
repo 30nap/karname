@@ -40,7 +40,7 @@ public class MeController {
     public record ProfileRequest(@NotBlank @Size(max = 100) String displayName) {
     }
 
-    public record PasswordChangeRequest(@NotBlank String currentPassword, @NotBlank @Size(max = 128) String newPassword) {
+    public record PasswordChangeRequest(@NotBlank String currentPassword, @NotBlank String newPassword) {
     }
 
     public record PasswordConfirmation(@NotBlank String password) {

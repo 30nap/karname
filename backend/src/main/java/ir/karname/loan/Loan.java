@@ -89,6 +89,10 @@ public class Loan {
         return accountId;
     }
 
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
     public BigDecimal getPrincipal() {
         return principal;
     }

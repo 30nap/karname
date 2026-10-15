@@ -89,7 +89,7 @@ public class UserService {
     @Transactional
     public void changePassword(long userId, String currentPassword, String newPassword) {
         User user = get(userId);
-        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+        if (!PasswordPolicy.matches(passwordEncoder, currentPassword, user.getPasswordHash())) {
             throw ApiException.badRequest("auth.wrongPassword");
         }
         validatePassword(newPassword, user.getUsername());
@@ -98,7 +98,7 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public void verifyPassword(long userId, String password) {
-        if (password == null || !passwordEncoder.matches(password, get(userId).getPasswordHash())) {
+        if (!PasswordPolicy.matches(passwordEncoder, password, get(userId).getPasswordHash())) {
             throw ApiException.badRequest("auth.wrongPassword");
         }
     }
@@ -167,8 +167,11 @@ public class UserService {
     }
 
     private static void validatePassword(String password, String username) {
-        if (password == null || password.length() < MIN_PASSWORD_LENGTH || password.length() > 128) {
+        if (password == null || password.length() < MIN_PASSWORD_LENGTH) {
             throw ApiException.badRequest("auth.weakPassword");
+        }
+        if (!PasswordPolicy.withinEncodingLimit(password)) {
+            throw ApiException.badRequest("auth.passwordTooLong");
         }
         if (password.equalsIgnoreCase(username)) {
             throw ApiException.badRequest("auth.weakPassword");

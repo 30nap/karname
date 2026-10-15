@@ -56,7 +56,7 @@ public class TwoFactorService {
         if (user.getTotpSecret() == null) {
             throw ApiException.badRequest("totp.notSetUp");
         }
-        if (password == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
+        if (!PasswordPolicy.matches(passwordEncoder, password, user.getPasswordHash())) {
             throw ApiException.badRequest("auth.wrongPassword");
         }
         OptionalLong step = totp.matchingStep(cipher.decrypt(user.getTotpSecret()), code);
@@ -73,7 +73,7 @@ public class TwoFactorService {
     @Transactional
     public void disable(long userId, String password) {
         User user = userService.get(userId);
-        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
+        if (!PasswordPolicy.matches(passwordEncoder, password, user.getPasswordHash())) {
             throw ApiException.badRequest("auth.wrongPassword");
         }
         user.setTotpEnabled(false);
@@ -106,7 +106,7 @@ public class TwoFactorService {
         }
         List<String> hashes = new ArrayList<>(Arrays.asList(user.getTotpRecoveryCodes().split(",")));
         for (int i = 0; i < hashes.size(); i++) {
-            if (passwordEncoder.matches(normalized, hashes.get(i))) {
+            if (PasswordPolicy.matches(passwordEncoder, normalized, hashes.get(i))) {
                 hashes.remove(i);
                 user.setTotpRecoveryCodes(hashes.isEmpty() ? null : String.join(",", hashes));
                 return true;
