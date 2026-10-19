@@ -75,6 +75,12 @@ describe('AssistantPage', () => {
     expect(await screen.findByText(/۱۸٬۰۰۰٬۰۰۰ تومان \(۶۳٫۲٪\)/)).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('button', { name: 'ارسال' })).toBeInTheDocument())
     expect(screen.getAllByText('تفکیک بر اساس دسته')).toHaveLength(1)
+    // in a right-to-left page the user writes on the right (the start side) and the answer faces it on the left
+    // (the question is also the conversation's title)
+    const asked = screen.getAllByText(QUESTION).map((e) => e.closest('[data-side]')).find(Boolean)
+    expect(asked).toHaveAttribute('data-side', 'user')
+    expect(asked).toHaveClass('justify-start')
+    expect(screen.getByText(/۱۸٬۰۰۰٬۰۰۰ تومان/).closest('[data-side]')).toHaveClass('justify-end')
     expect(screen.getByText('claude-opus-5-5')).toBeInTheDocument()
     expect(sent).toEqual([{ conversationId: null, text: QUESTION }])
   })

@@ -18,10 +18,18 @@ public class LedgerController {
 
     private final NetWorthService netWorth;
     private final CostBasisService costBasis;
+    private final PortfolioService portfolio;
 
-    public LedgerController(NetWorthService netWorth, CostBasisService costBasis) {
+    public LedgerController(NetWorthService netWorth, CostBasisService costBasis, PortfolioService portfolio) {
         this.netWorth = netWorth;
         this.costBasis = costBasis;
+        this.portfolio = portfolio;
+    }
+
+    /** Every share and fund the user holds, with cost, value and gain or loss. */
+    @GetMapping("/api/v1/portfolio/securities")
+    public PortfolioService.PortfolioView securities(@AuthenticationPrincipal KarnamePrincipal user) {
+        return portfolio.securities(user.id());
     }
 
     @GetMapping("/api/v1/net-worth")

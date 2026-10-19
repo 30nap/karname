@@ -27,6 +27,14 @@ import java.util.Map;
 public class TsetmcClient {
 
     private static final ZoneId TEHRAN = ZoneId.of("Asia/Tehran");
+    /**
+     * TSETMC refuses clients that do not look like a browser on its own site (a 403, or empty lists),
+     * so requests carry a browser's User-Agent and the site as Referer.
+     */
+    static final Map<String, String> HEADERS = Map.of(
+            "User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+            "Accept", "application/json, text/plain, */*",
+            "Referer", "https://www.tsetmc.com/");
     private final PriceHttpClient http;
     private final Clock clock;
     private final String baseUrl;
@@ -41,7 +49,15 @@ public class TsetmcClient {
     public record StockInstrument(String instrumentId, String symbol, String nameFa) {
     }
 
-    public record StockQuote(BigDecimal priceToman, Instant quotedAt) {
+    /**
+     * A closing price and when it was made. {@code previousToman}: the exchange's own previous price for
+     * this session, which it adjusts after a capital increase or a dividend (null when not given).
+     */
+    public record StockQuote(BigDecimal priceToman, Instant quotedAt, BigDecimal previousToman) {
+
+        public StockQuote(BigDecimal priceToman, Instant quotedAt) {
+            this(priceToman, quotedAt, null);
+        }
     }
 
     public List<StockInstrument> search(String query) {
@@ -117,7 +133,9 @@ public class TsetmcClient {
         } catch (DateTimeException | NumberFormatException ex) {
             throw new PriceFetchException("تاریخ یا ساعت قیمت دریافتی از بورس معتبر نیست.", ex);
         }
-        return new StockQuote(price, quotedAt);
+        BigDecimal previous = PriceJson.positiveNumber(quote.path("priceYesterday")).map(rial -> rial.movePointLeft(1))
+                .filter(PriceService::acceptable).orElse(null);
+        return new StockQuote(price, quotedAt, previous);
     }
 
     public static void validateId(String instrumentId) {
@@ -127,7 +145,26 @@ public class TsetmcClient {
     }
 
     private JsonNode get(String path) {
-        return PriceJson.parse(http.get(URI.create(baseUrl + "/" + path), Map.of(), List.of()));
+        String body;
+        try {
+            body = http.get(URI.create(baseUrl + "/" + path), HEADERS, List.of());
+        } catch (PriceFetchException e) {
+            if (e.status() == 403) {
+                throw new PriceFetchException("بورس (TSETMC) درخواست را رد کرد (کد ۴۰۳). TSETMC فقط از اینترنت ایران پاسخ می‌دهد؛ "
+                        + "اگر سرور بیرون از ایران است، برای آن پراکسی ایرانی تنظیم کنید.", 403);
+            }
+            throw e;
+        }
+        String text = body == null ? "" : body.strip();
+        // a wrong path or a blocked request comes back as a web page with status 200
+        if (text.startsWith("<")) {
+            boolean blocked = text.contains("Request Rejected") || text.contains("مسدود") || text.contains("دسترسی شما")
+                    || text.contains("General Error Detected");
+            throw new PriceFetchException(blocked
+                    ? "بورس (TSETMC) درخواست را مسدود کرد؛ کمی بعد دوباره امتحان می‌شود."
+                    : "بورس (TSETMC) به جای داده یک صفحه‌ی وب برگرداند؛ نشانی سرویس را بررسی کنید.");
+        }
+        return PriceJson.parse(text);
     }
 
     private static StockInstrument instrument(JsonNode node) {

@@ -180,6 +180,34 @@ public class PriceService {
         return true;
     }
 
+    /** The last closing price fetched from the exchange for a user's linked security, if any. */
+    @Transactional(readOnly = true)
+    public java.util.Optional<Fetched> lastStockQuote(Commodity commodity) {
+        return jdbc.sql("""
+                        SELECT price_toman, priced_at FROM prices
+                        WHERE commodity_id = :id AND user_id = :userId AND source = 'TSETMC'
+                        ORDER BY priced_at DESC, id DESC LIMIT 1
+                        """)
+                .param("id", commodity.getId()).param("userId", commodity.getUserId())
+                .query((rs, n) -> new Fetched("TSETMC", rs.getBigDecimal(1), rs.getTimestamp(2).toInstant())).optional();
+    }
+
+    /**
+     * Notes that the exchange adjusted a security's price for a new session (a capital increase, a
+     * dividend): its previous price differs from the last close recorded. Once per session.
+     */
+    @Transactional
+    public void recordAdjustment(Commodity commodity, java.time.LocalDate sessionDay, BigDecimal previousToman, BigDecimal adjustedToman) {
+        jdbc.sql("""
+                        INSERT INTO price_adjustments (commodity_id, session_day, previous_toman, adjusted_toman, noticed_at)
+                        VALUES (:id, :day, :previous, :adjusted, :now)
+                        ON CONFLICT (commodity_id, session_day) DO NOTHING
+                        """)
+                .param("id", commodity.getId()).param("day", sessionDay).param("previous", previousToman).param("adjusted", adjustedToman)
+                .param("now", Timestamp.from(clock.instant()))
+                .update();
+    }
+
     /**
      * A private stock quote keeps the exchange's timestamp. Polling a closed or suspended market
      * must not make its old closing price look current or override a newer manual valuation.

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api/client'
-import type { Account, AccountInput, CostBasis, Transaction } from '@/lib/api/types'
+import type { Account, AccountInput, CostBasis, SecuritiesPortfolio, Transaction } from '@/lib/api/types'
 import { invalidateFinance } from '@/features/transactions/invalidate'
 
 export function useAccounts(includeArchived = false) {
@@ -21,6 +21,11 @@ export function useCostBasis(account: Account | undefined) {
     queryFn: () => api.get<CostBasis>(`/accounts/${account!.id}/cost-basis`),
     enabled: applicable,
   })
+}
+
+/** The shares and funds held across accounts, with cost and gain or loss; refreshed with the accounts. */
+export function useSecuritiesPortfolio() {
+  return useQuery({ queryKey: ['accounts', 'portfolio'], queryFn: () => api.get<SecuritiesPortfolio>('/portfolio/securities') })
 }
 
 export function useSaveAccount() {

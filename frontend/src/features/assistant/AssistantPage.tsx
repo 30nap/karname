@@ -342,10 +342,11 @@ function Welcome({ onSuggest }: { onSuggest: (text: string) => void }) {
   )
 }
 
+/** The user's message: on the right, where a Persian conversation starts (the start side in RTL). */
 function UserBubble({ text }: { text: string }) {
   return (
-    <div className="flex justify-end">
-      <p className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-ee-md bg-primary px-4 py-2.5 text-sm leading-7 text-primary-foreground">
+    <div className="flex justify-start" data-side="user">
+      <p className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-es-md bg-primary px-4 py-2.5 text-sm leading-7 text-primary-foreground">
         {text}
       </p>
     </div>
@@ -356,26 +357,29 @@ function AssistantBlock({ items, writing, notice, error }: { items: ChatItem[]; 
   const hasText = items.some((i) => i.kind === 'assistant' && i.text)
   // drafts close the answer, under the text that explains them
   const drafts = items.filter((i) => i.kind === 'drafts' && i.drafts?.length)
+  // the assistant's answer: on the left, facing the user's messages
   return (
-    <div className="flex min-w-0 flex-col gap-2">
-      {items.map((item, index) => {
-        switch (item.kind) {
-          case 'assistant':
-            return item.text ? <AiMarkdown key={index}>{item.text}</AiMarkdown> : null
-          case 'tool':
-            return <ToolChip key={index} item={item} />
-          case 'error':
-            return <Alert key={index} variant="destructive"><X />{item.text}</Alert>
-          default:
-            return null
-        }
-      })}
-      {writing && !hasText ? (
-        <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />در حال بررسی…</p>
-      ) : null}
-      {drafts.map((item, index) => <DraftList key={index} drafts={item.drafts ?? []} />)}
-      {notice ? <Alert variant="warning">{notice}</Alert> : null}
-      {error ? <Alert variant="destructive"><X />{error}</Alert> : null}
+    <div className="flex justify-end" data-side="assistant">
+      <div className="flex min-w-0 max-w-[92%] flex-col gap-2 rounded-2xl rounded-ee-md border bg-card px-4 py-3 sm:max-w-[85%]">
+        {items.map((item, index) => {
+          switch (item.kind) {
+            case 'assistant':
+              return item.text ? <AiMarkdown key={index}>{item.text}</AiMarkdown> : null
+            case 'tool':
+              return <ToolChip key={index} item={item} />
+            case 'error':
+              return <Alert key={index} variant="destructive"><X />{item.text}</Alert>
+            default:
+              return null
+          }
+        })}
+        {writing && !hasText ? (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />در حال بررسی…</p>
+        ) : null}
+        {drafts.map((item, index) => <DraftList key={index} drafts={item.drafts ?? []} />)}
+        {notice ? <Alert variant="warning">{notice}</Alert> : null}
+        {error ? <Alert variant="destructive"><X />{error}</Alert> : null}
+      </div>
     </div>
   )
 }

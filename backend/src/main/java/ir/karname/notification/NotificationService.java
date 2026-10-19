@@ -159,6 +159,7 @@ public class NotificationService {
         budgets(userId, today, rial, candidates);
         goals(userId, candidates);
         prices(userId, today, candidates);
+        adjustments(userId, rial, candidates);
         reminders(userId, today, rial, candidates);
 
         int created = 0;
@@ -284,6 +285,31 @@ public class NotificationService {
                         "آخرین قیمت " + c.nameFa() + " مربوط به " + date + " است؛ برای ارزش‌گذاری دقیق دارایی‌ها، قیمت را به‌روز کنید.", "/assets"));
             }
         }
+    }
+
+    /**
+     * A security the user holds whose price the exchange adjusted in the past two weeks (a capital
+     * increase, a dividend): its value dropped, and bonus shares or a dividend may need recording.
+     */
+    private void adjustments(long userId, boolean rial, List<Candidate> out) {
+        jdbc.sql("""
+                        SELECT a.id, c.name_fa, a.previous_toman, a.adjusted_toman
+                        FROM price_adjustments a JOIN commodities c ON c.id = a.commodity_id
+                        WHERE c.user_id = :userId AND a.noticed_at > :since
+                          AND EXISTS (SELECT 1 FROM accounts acc WHERE acc.user_id = :userId AND acc.commodity_id = a.commodity_id
+                                      AND NOT acc.archived)
+                        ORDER BY a.id
+                        """)
+                .param("userId", userId)
+                .param("since", java.sql.Timestamp.from(clock.instant().minus(Duration.ofDays(14))))
+                .query((rs, n) -> new Candidate("price-adjusted:" + rs.getLong(1), "PRICE_ADJUSTED", Severity.INFO,
+                        "قیمت " + rs.getString(2) + " تعدیل شد",
+                        "بورس قیمت پایه را از " + PersianFormat.money(rs.getBigDecimal(3), rial) + " به " + PersianFormat.money(rs.getBigDecimal(4), rial)
+                                + " رساند؛ احتمالاً افزایش سرمایه یا سود نقدی بوده است. اگر سهام جایزه گرفته‌اید، تعداد تازه را با «تطبیق موجودی» "
+                                + "در صفحه‌ی همان حساب ثبت کنید (بی‌هزینه حساب می‌شود) و سود نقدی را به‌عنوان درآمد.",
+                        "/accounts"))
+                .list()
+                .forEach(out::add);
     }
 
     private void reminders(long userId, LocalDate today, boolean rial, List<Candidate> out) {

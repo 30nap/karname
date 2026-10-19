@@ -18,6 +18,7 @@ import { sumAmounts } from '@/lib/format/money'
 import { cn } from '@/lib/cn'
 import { useAccounts } from './api'
 import { AccountFormDialog } from './AccountFormDialog'
+import { SecuritiesPortfolio } from './SecuritiesPortfolio'
 
 function AccountCard({ account }: { account: Account }) {
   const commodities = useCommodityMap()
@@ -103,6 +104,7 @@ export function AccountsPage() {
               </label>
             </CardContent>
           </Card>
+          <SecuritiesPortfolio />
           {ACCOUNT_GROUPS.map((group) => {
             const items = accounts.filter((a) => group.types.includes(a.type))
             if (items.length === 0) return null

@@ -3,6 +3,7 @@ package ir.karname.ledger;
 import ir.karname.account.Account;
 import ir.karname.account.AccountService;
 import ir.karname.commodity.Commodity;
+import ir.karname.commodity.CommodityKind;
 import ir.karname.commodity.CommodityRepository;
 import ir.karname.commodity.PricePoint;
 import ir.karname.commodity.PriceService;
@@ -102,8 +103,9 @@ public class CostBasisService {
             boolean incoming = r.toAccountId() != null && r.toAccountId() == accountId;
             if ("TRANSFER".equals(r.type())) {
                 if (incoming) {
-                    // paid with the source account's commodity
-                    return new Movement(r.date(), r.toAmount(), value(timeline, r.fromCommodity(), r.amount(), at));
+                    // paid with the source account's commodity, the fee (a broker's commission) included
+                    BigDecimal paid = r.amount().add(r.fee() == null ? BigDecimal.ZERO : r.fee());
+                    return new Movement(r.date(), r.toAmount(), value(timeline, r.fromCommodity(), paid, at));
                 }
                 BigDecimal quantity = r.amount().add(r.fee() == null ? BigDecimal.ZERO : r.fee());
                 return new Movement(r.date(), quantity.negate(), value(timeline, r.toCommodity(), r.toAmount(), at));
@@ -113,6 +115,10 @@ public class CostBasisService {
                 case "EXPENSE" -> r.amount().negate();
                 default -> r.amount(); // OPENING / ADJUSTMENT are signed
             };
+            // more shares by a balance adjustment are bonus shares (or a split): they cost nothing
+            if ("ADJUSTMENT".equals(r.type()) && signed.signum() > 0 && commodity.getKind() == CommodityKind.SECURITY) {
+                return new Movement(r.date(), signed, BigDecimal.ZERO);
+            }
             return new Movement(r.date(), signed, value(timeline, commodity.getId(), signed.abs(), at));
         }).toList();
 

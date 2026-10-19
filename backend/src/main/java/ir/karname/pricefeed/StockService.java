@@ -19,9 +19,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.math.BigDecimal;
+import java.math.MathContext;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -36,6 +40,9 @@ public class StockService {
 
     private static final Logger log = LoggerFactory.getLogger(StockService.class);
     private static final Duration INTERVAL = Duration.ofMinutes(30);
+    private static final ZoneId TEHRAN = ZoneId.of("Asia/Tehran");
+    /** Beyond any day's price limit (±3% to ±10%), with room for a last fetch made before the close. */
+    static final BigDecimal ADJUSTMENT = new BigDecimal("0.12");
     private final CommodityRepository repository;
     private final CommodityService commodities;
     private final PriceService prices;
@@ -251,11 +258,29 @@ public class StockService {
                 return;
             }
             if (outcome.quote() != null) {
+                noticeAdjustment(commodity, outcome.quote());
                 prices.recordStockQuote(commodity, outcome.quote().priceToman(), outcome.quote().quotedAt());
                 commodity.setStockLastSuccessAt(clock.instant());
             }
             commodity.setStockLastError(outcome.error());
         });
+    }
+
+    /**
+     * The first quote of a new session whose previous price (the exchange's, adjusted overnight) is far
+     * from the last close recorded: the exchange moved the price for a capital increase, a dividend or
+     * a merger of shares, beyond any day's price limit. The holder is told (bonus shares to record).
+     */
+    private void noticeAdjustment(Commodity commodity, StockQuote quote) {
+        if (quote.previousToman() == null) {
+            return;
+        }
+        LocalDate session = quote.quotedAt().atZone(TEHRAN).toLocalDate();
+        prices.lastStockQuote(commodity)
+                .filter(last -> last.at().atZone(TEHRAN).toLocalDate().isBefore(session))
+                .filter(last -> quote.previousToman().divide(last.price(), MathContext.DECIMAL64).subtract(BigDecimal.ONE).abs()
+                        .compareTo(ADJUSTMENT) > 0)
+                .ifPresent(last -> prices.recordAdjustment(commodity, session, last.price(), quote.previousToman()));
     }
 
     private StockInstrument metadata(String instrumentId) {

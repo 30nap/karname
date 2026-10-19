@@ -255,6 +255,36 @@ export interface CostBasis {
   costComplete: boolean
 }
 
+/** One share or fund held in its own account, valued at its latest price. */
+export interface PortfolioHolding {
+  accountId: number
+  accountName: string
+  commodity: string
+  nameFa: string
+  symbol: string | null
+  quantity: string
+  averageCostToman: string | null
+  costBasisToman: string
+  priceToman: string | null
+  pricedAt: string | null
+  priceStale: boolean
+  marketValueToman: string | null
+  unrealizedToman: string | null
+  realizedToman: string
+  costComplete: boolean
+}
+
+/** Every share and fund the user holds, with totals over those that have a price. */
+export interface SecuritiesPortfolio {
+  holdings: PortfolioHolding[]
+  costBasisToman: string
+  marketValueToman: string
+  unrealizedToman: string
+  realizedToman: string
+  unpriced: number
+  costComplete: boolean
+}
+
 export type BudgetStatus = 'OK' | 'WARNING' | 'OVER'
 
 export interface BudgetItem {
