@@ -4,6 +4,7 @@ import { useFormat } from '@/app/preferences'
 import { api, ApiError } from '@/lib/api/client'
 import type {
   AiDraftInput,
+  AiProposal,
   AiPresets,
   AiProvider,
   AiProviderInput,
@@ -65,6 +66,28 @@ export function useCommitDrafts() {
       return Promise.all([invalidateFinance(queryClient), queryClient.invalidateQueries({ queryKey: ['ai', 'conversation'] })])
     },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : 'ثبت تراکنش ناموفق بود.'),
+  })
+}
+
+/**
+ * The user's decision on a card the assistant proposed. Announced here, like recorded drafts: the
+ * card may be replaced by the stored conversation while the request runs.
+ */
+export function useDecideProposal() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ ref, decision }: { ref: string; decision: 'apply' | 'dismiss' }) =>
+      api.post<AiProposal>(`/ai/proposals/${ref}/${decision}`),
+    meta: { toastError: false },
+    onSuccess: (proposal, { decision }) => {
+      if (decision === 'apply') toast.success(`«${proposal.title}» ثبت شد.`)
+      return Promise.all([
+        invalidateFinance(queryClient),
+        queryClient.invalidateQueries({ queryKey: ['categories'] }),
+        queryClient.invalidateQueries({ queryKey: ['ai', 'conversation'] }),
+      ])
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : 'ثبت ناموفق بود؛ دوباره امتحان کنید.'),
   })
 }
 

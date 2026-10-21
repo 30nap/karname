@@ -48,3 +48,23 @@ test('the monthly report is written from the month\'s figures', async ({ page })
   await expect(page.getByRole('heading', { name: 'پیشنهادها' })).toBeVisible()
   await expect(page.getByText(/مروری بر/)).toBeVisible()
 })
+
+test('the assistant proposes a loan as a card and records it only when confirmed', async ({ page }) => {
+  await register(page)
+  await bankAccount(page, 'ملت حقوق', '50000000')
+  await page.goto('/assistant')
+  await page.getByRole('button', { name: /یک وام ۲۰۰ میلیونی/ }).click()
+
+  const card = page.locator('[data-proposal="LOAN"]')
+  await expect(card).toBeVisible()
+  await expect(card.getByText('دویست میلیون تومان')).toBeVisible()
+  await expect(card.getByText('مبلغ هر قسط')).toBeVisible()
+  await expect(card.getByText('ملت حقوق', { exact: true }).first()).toBeVisible()
+
+  await card.getByRole('button', { name: 'ثبت' }).click()
+  await expect(page.getByText('«وام» ثبت شد.')).toBeVisible()
+  await expect(card.getByText('ثبت شد', { exact: true })).toBeVisible()
+  await card.getByRole('link', { name: /مشاهده/ }).click()
+  await expect(page).toHaveURL(/\/loans\/\d+$/)
+  await expect(page.getByRole('heading', { name: 'وام', exact: true })).toBeVisible()
+})

@@ -8,7 +8,8 @@ digits and amounts in Toman.
 It keeps track of what Iranians actually hold — Rial accounts, dollars and euros, gold by the
 gram, Emami coins, Tether — values all of it in Toman, dollars or grams of gold, and handles
 loans, cheques and recurring payments. The AI never does the arithmetic: every figure comes from
-the app's own calculations, and the assistant only drafts transactions for you to confirm.
+the app's own calculations, and the assistant only proposes what to record — a transaction, an
+account, a loan, a budget… — as a card you confirm.
 
 <p>
   <img src="docs/screenshots/dashboard.png" alt="Dashboard: net worth with its breakdown and trend, this month's income, expenses and savings, budgets and goals" width="74%">
@@ -60,6 +61,10 @@ The screenshots show the built-in demo data (`KARNAME_DEMO`) and the offline scr
 **AI assistant (optional)**
 - Chat that answers from your data through tools (balances, spending, budgets, goals, loans,
   prices, an exact calculator); answers stream in as they are written.
+- Recording by conversation in every section: tell it «یک وام ۲۰۰ میلیونی با سود ۲۳ درصد در ۳۶ قسط
+  گرفتم» or «قسط این ماه وامم را دادم», a cheque, a budget, a goal, a recurring bill, an account, a
+  price or shares on the Tehran exchange, and it prepares a card with the app's own figures
+  (installment, interest, monthly need) for you to confirm or dismiss.
 - Quick add in plain Persian ("دیروز ناهار ۱۸۰ و اسنپ ۹۵ تومن"), bank SMS import, a written
   monthly report with suggestions, and categories for uncategorised transactions. Everything is
   a draft until you confirm it.

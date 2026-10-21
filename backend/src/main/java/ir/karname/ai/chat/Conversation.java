@@ -49,6 +49,10 @@ public class Conversation {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /** The tools and instructions it started with ({@link ir.karname.ai.tools.FinanceTools#CURRENT_VERSION}); kept for its life. */
+    @Column(name = "tools_version", nullable = false)
+    private short toolsVersion = 1;
+
     @Version
     private long version;
 
@@ -62,6 +66,11 @@ public class Conversation {
         this.providerKind = providerKind;
         this.model = model;
         this.updatedAt = now;
+        this.toolsVersion = (short) ir.karname.ai.tools.FinanceTools.CURRENT_VERSION;
+    }
+
+    public int getToolsVersion() {
+        return toolsVersion;
     }
 
     public Long getId() {

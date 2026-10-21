@@ -6,6 +6,7 @@ describe('chat stream parsing', () => {
     expect(parseEvent('event:text\ndata:{"delta":"سلام"}')).toEqual({ type: 'text', delta: 'سلام' })
     expect(parseEvent('event: tool\ndata: {"id":"c1","name":"calculate","label":"محاسبه","status":"running"}'))
       .toEqual({ type: 'tool', id: 'c1', name: 'calculate', label: 'محاسبه', status: 'running' })
+    expect(parseEvent('event:proposals\ndata:{"toolId":"c2","proposals":[]}')).toEqual({ type: 'proposals', toolId: 'c2', proposals: [] })
   })
 
   it('joins multi-line data and ignores comments, unknown events and broken JSON', () => {

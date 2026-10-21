@@ -85,6 +85,24 @@ describe('AssistantPage', () => {
     expect(sent).toEqual([{ conversationId: null, text: QUESTION }])
   })
 
+  it('shows a proposed record as a card inside the answer while it streams', async () => {
+    let writer!: ReadableStreamDefaultController<Uint8Array>
+    const body = new ReadableStream<Uint8Array>({ start: (c) => { writer = c } })
+    const { user } = setup(() => new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } }))
+    await user.click(await screen.findByRole('button', { name: /یک وام ۲۰۰ میلیونی/ }))
+    writer.enqueue(event('start', { conversationId: 7, title: 'وام', turn: 1, created: true }))
+    writer.enqueue(event('tool', { id: 'c1', name: 'propose_loan', label: 'پیشنهاد وام', status: 'done' }))
+    writer.enqueue(event('proposals', { toolId: 'c1', proposals: [{
+      ref: 'a'.repeat(32), kind: 'LOAN', title: 'وام بانک ملی', status: 'PENDING', link: null, expiresAt: '2026-10-13T08:30:00Z',
+      lines: [{ label: 'مبلغ وام', value: '200000000', format: 'MONEY', unit: null, main: true }], effects: [], warnings: [],
+    }] }))
+    writer.enqueue(event('text', { delta: 'کارت وام را بررسی کنید.' }))
+    const card = (await screen.findByText('وام بانک ملی')).closest('[data-proposal]')
+    expect(card?.closest('[data-side]')).toHaveAttribute('data-side', 'assistant')
+    expect(screen.getByRole('button', { name: 'ثبت' })).toBeInTheDocument()
+    writer.close()
+  })
+
   it('keeps a refused message on screen with the reason', async () => {
     const { user } = setup(() => new Response(JSON.stringify({ detail: 'سهمیه‌ی امروز شما تمام شده است.', code: 'ai.quotaExceeded' }),
       { status: 429, headers: { 'content-type': 'application/json' } }))

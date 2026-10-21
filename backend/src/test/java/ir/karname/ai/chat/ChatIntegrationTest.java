@@ -8,6 +8,8 @@ import ir.karname.ai.llm.LlmMessage;
 import ir.karname.ai.llm.LlmRequest;
 import ir.karname.ai.llm.Part;
 import ir.karname.ai.llm.fake.FakeLlm;
+import ir.karname.ai.propose.ProposalService;
+import ir.karname.ai.propose.ProposalView;
 import ir.karname.ai.provider.AiTask;
 import ir.karname.ai.usage.AiUsageService;
 import ir.karname.common.web.ApiException;
@@ -36,6 +38,9 @@ class ChatIntegrationTest extends AiTestSupport {
 
     @Autowired
     private ChatService chat;
+
+    @Autowired
+    private ProposalService proposals;
 
     @Autowired
     private AiUsageService usage;
@@ -80,8 +85,9 @@ class ChatIntegrationTest extends AiTestSupport {
 
         // the second request carried the tool result, computed by the app, not the model
         LlmRequest second = fake.requests().get(1);
-        assertThat(second.tools()).hasSize(15);
-        assertThat(second.system()).contains("دستیار کارنامه");
+        // a new conversation gets every tool, proposals for each section included
+        assertThat(second.tools()).hasSize(28);
+        assertThat(second.system()).contains("دستیار کارنامه").contains("# Recording data");
         LlmMessage.User results = (LlmMessage.User) second.messages().getLast();
         Part.ToolResult result = (Part.ToolResult) results.parts().getFirst();
         assertThat(result.error()).isFalse();
@@ -159,6 +165,67 @@ class ChatIntegrationTest extends AiTestSupport {
         assertThat(sink.last("error").get("message")).isEqualTo("سرویس هوش مصنوعی موقتاً در دسترس نیست؛ کمی بعد دوباره امتحان کنید.");
         assertThat(jdbc.sql("SELECT outcome FROM ai_usage WHERE user_id = ?").param(user.id()).query(String.class).single()).isEqualTo("ERROR");
         assertThat(jdbc.sql("SELECT count(*) FROM ai_messages WHERE excluded").query(Integer.class).single()).isEqualTo(1);
+    }
+
+    @Test
+    void aProposedLoanIsACardTheUserConfirmsAndTheAssistantHearsAboutOnce() {
+        fakeProvider(true, AiTask.CHAT);
+        fake.then(FakeLlm.toolCalls(FakeLlm.call("propose_loan", """
+                        {"name":"وام مسکن","principal":200,"principal_scale":"MILLION","annual_rate_percent":23,"term_months":36,
+                         "first_due_date":"1405/08/14","deposit_account":"ملت"}""")))
+                .then(r -> FakeLlm.text("کارت وام را بررسی و تأیید کنید."));
+        RecordingSink sink = turn(null, "یک وام ۲۰۰ میلیونی ۳۶ ماهه با سود ۲۳ درصد گرفتم");
+        assertThat(sink.names()).contains("proposals");
+        List<?> shown = (List<?>) sink.last("proposals").get("proposals");
+        assertThat(shown).hasSize(1);
+        ProposalView card = (ProposalView) shown.getFirst();
+        assertThat(card.status()).isEqualTo("PENDING");
+        assertThat(jdbc.sql("SELECT count(*) FROM loans").query(Long.class).single()).isZero();
+
+        // the model heard the app's figures and that nothing is recorded yet
+        Part.ToolResult result = (Part.ToolResult) ((LlmMessage.User) fake.requests().get(1).messages().getLast()).parts().getFirst();
+        assertThat(result.content()).contains("مبلغ هر قسط").contains("nothing is recorded until they confirm");
+
+        long id = conversationId(sink);
+        View view = chat.get(user.id(), id);
+        assertThat(view.items()).extracting(ChatService.Item::kind).containsExactly("user", "tool", "proposals", "assistant");
+        assertThat(view.items().get(2).proposals()).extracting(ProposalView::ref).containsExactly(card.ref());
+
+        proposals.apply(user.id(), card.ref());
+        assertThat(chat.get(user.id(), id).items().get(2).proposals().getFirst().status()).isEqualTo("APPLIED");
+
+        fake.then(r -> FakeLlm.text("خواهش می‌کنم."));
+        turn(id, "ممنون");
+        Part.Context told = (Part.Context) fake.requests().getLast().messages().getLast().parts().getFirst();
+        assertThat(told.text()).contains("The user confirmed and recorded: «وام مسکن»");
+        fake.then(r -> FakeLlm.text("خواهش می‌کنم."));
+        turn(id, "باز هم ممنون");
+        Part.Context again = (Part.Context) fake.requests().getLast().messages().getLast().parts().getFirst();
+        assertThat(again.text()).doesNotContain("confirmed");
+    }
+
+    @Test
+    void aFailedTurnTakesItsCardsWithIt() {
+        fakeProvider(true, AiTask.CHAT);
+        fake.then(FakeLlm.toolCalls(FakeLlm.call("propose_category", "{\"name\":\"تیراندازی با کمان\",\"kind\":\"EXPENSE\"}")))
+                .thenFail(LlmException.Kind.UNAVAILABLE);
+        RecordingSink sink = turn(null, "یک دسته برای تیراندازی بساز");
+        assertThat(sink.names()).contains("proposals").last().isEqualTo("error");
+        assertThat(jdbc.sql("SELECT status FROM ai_proposals").query(String.class).single()).isEqualTo("DISMISSED");
+        assertThat(chat.get(user.id(), conversationId(sink)).items()).extracting(ChatService.Item::kind).doesNotContain("proposals");
+    }
+
+    @Test
+    void aConversationStartedWithTheFirstToolsKeepsThem() {
+        fakeProvider(true, AiTask.CHAT);
+        fake.then(r -> FakeLlm.text("سلام"));
+        long id = conversationId(turn(null, "سلام"));
+        jdbc.sql("UPDATE ai_conversations SET tools_version = 1 WHERE id = ?").param(id).update();
+        fake.then(r -> FakeLlm.text("بفرمایید"));
+        turn(id, "سؤال بعدی");
+        LlmRequest request = fake.requests().getLast();
+        assertThat(request.tools()).hasSize(15);
+        assertThat(request.system()).doesNotContain("# Recording data").contains("# Recording transactions");
     }
 
     @Test

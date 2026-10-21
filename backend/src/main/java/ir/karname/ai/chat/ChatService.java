@@ -18,6 +18,8 @@ import ir.karname.ai.llm.ToolSpec;
 import ir.karname.ai.provider.AiProviderService;
 import ir.karname.ai.provider.AiProviderService.ResolvedRoute;
 import ir.karname.ai.provider.AiTask;
+import ir.karname.ai.propose.ProposalService;
+import ir.karname.ai.propose.ProposalView;
 import ir.karname.ai.tools.FinanceTools;
 import ir.karname.ai.tools.FinanceTools.ToolContext;
 import ir.karname.ai.usage.AiUsageService;
@@ -35,6 +37,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -80,6 +83,7 @@ public class ChatService {
     private final AiAccess access;
     private final AiUsageService usage;
     private final FinanceTools tools;
+    private final ProposalService proposals;
     private final UserService users;
     private final Messages text;
     private final JsonMapper json;
@@ -91,14 +95,15 @@ public class ChatService {
     private final Map<Long, Running> running = new ConcurrentHashMap<>();
 
     public ChatService(ConversationRepository conversations, ConversationMessageRepository messages, AiProviderService providers,
-            AiAccess access, AiUsageService usage, FinanceTools tools, UserService users, Messages text, JsonMapper json, JdbcClient jdbc,
-            TransactionTemplate transactions, KarnameProperties properties, Clock clock) {
+            AiAccess access, AiUsageService usage, FinanceTools tools, ProposalService proposals, UserService users, Messages text,
+            JsonMapper json, JdbcClient jdbc, TransactionTemplate transactions, KarnameProperties properties, Clock clock) {
         this.conversations = conversations;
         this.messages = messages;
         this.providers = providers;
         this.access = access;
         this.usage = usage;
         this.tools = tools;
+        this.proposals = proposals;
         this.users = users;
         this.text = text;
         this.json = json;
@@ -144,8 +149,9 @@ public class ChatService {
     }
 
     /** A checked turn, ready to run; its conversation exists. */
+    /** {@code toolsVersion}: the tool set the conversation was started with. */
     public record Turn(long userId, long conversationId, String title, boolean created, String text, LlmClient client, String model,
-            Effort effort, Long providerId, String providerName, Running handle) {
+            Effort effort, Long providerId, String providerName, Running handle, int toolsVersion) {
     }
 
     public record Summary(long id, String title, String model, String providerName, boolean available, int turns, Instant updatedAt) {
@@ -153,13 +159,14 @@ public class ChatService {
 
     /**
      * One thing to show: {@code user} and {@code assistant} text, a {@code tool} call (with its
-     * status), proposed {@code drafts}, or the {@code error} that ended a turn.
+     * status), draft transactions ({@code drafts}), proposal cards ({@code proposals}), or the
+     * {@code error} that ended a turn.
      */
     public record Item(String kind, int turn, String text, String toolId, String tool, String label, String status,
-            List<DraftView> drafts) {
+            List<DraftView> drafts, List<ProposalView> proposals) {
 
         static Item text(String kind, int turn, String text) {
-            return new Item(kind, turn, text, null, null, null, null, null);
+            return new Item(kind, turn, text, null, null, null, null, null, null);
         }
     }
 
@@ -223,7 +230,7 @@ public class ChatService {
             }
             String providerName = providers.name(providerId).orElse(null);
             return new Turn(userId, conversation.getId(), conversation.getTitle(), created, clean, client, model, effort, providerId,
-                    providerName, handle);
+                    providerName, handle, conversation.getToolsVersion());
         } catch (RuntimeException e) {
             if (reserved) {
                 usage.release(userId);
@@ -242,18 +249,27 @@ public class ChatService {
         Outcome outcome = Outcome.OK;
         long deadline = System.nanoTime() + TURN_DEADLINE.toNanos();
         try {
-            ToolContext ctx = context(turn.userId());
             List<LlmMessage> history = history(conversationId);
             int seq = messages.maxSeq(conversationId);
             number = transactions.execute(status -> conversations.findById(conversationId).orElseThrow().nextTurn(clock.instant()));
-            LlmMessage.User question = new LlmMessage.User(List.of(new Part.Context(contextLine(ctx.today())), new Part.Text(turn.text())));
+            int version = turn.toolsVersion();
+            ToolContext ctx = context(turn.userId(), conversationId, number, version);
+            String context = contextLine(ctx.today());
+            if (version >= 2) {
+                // what the user did with earlier cards, so they are not proposed again
+                List<String> changes = proposals.changesSince(conversationId);
+                if (!changes.isEmpty()) {
+                    context += "\n" + String.join("\n", changes);
+                }
+            }
+            LlmMessage.User question = new LlmMessage.User(List.of(new Part.Context(context), new Part.Text(turn.text())));
             save(conversationId, ++seq, number, Role.USER, question.parts(), null);
             history.add(question);
             sink.send("start", Map.of("conversationId", conversationId, "title", turn.title(), "turn", number, "created", turn.created()));
 
             boolean useTools = turn.client().supportsTools(turn.model());
-            List<ToolSpec> specs = useTools ? tools.specs() : List.of();
-            String system = useTools ? Prompts.CHAT : Prompts.CHAT_SNAPSHOT;
+            List<ToolSpec> specs = useTools ? tools.specs(version) : List.of();
+            String system = !useTools ? Prompts.CHAT_SNAPSHOT : version >= 2 ? Prompts.CHAT_V2 : Prompts.CHAT;
             Listener listener = new Listener(sink, turn.handle(), deadline);
             for (int round = 1; ; round++) {
                 List<LlmMessage> request = useTools ? history : withSnapshot(history, tools.snapshot(ctx));
@@ -290,8 +306,15 @@ public class ChatService {
                     results.add(new Part.ToolResult(call.id(), result.content(), result.error(), result.data()));
                     sink.send("tool", tool(call, label, result.error() ? "error" : "done"));
                     if (result.data() != null) {
-                        sink.send("drafts", Map.of("toolId", call.id(), "drafts", drafts(result.data()).stream()
-                                .map(d -> DraftView.of(d, false)).toList()));
+                        List<String> refs = proposalRefs(result.data());
+                        if (refs != null) {
+                            Map<String, ProposalView> views = proposals.views(turn.userId(), refs);
+                            sink.send("proposals", Map.of("toolId", call.id(), "proposals", refs.stream().map(views::get)
+                                    .filter(java.util.Objects::nonNull).toList()));
+                        } else {
+                            sink.send("drafts", Map.of("toolId", call.id(), "drafts", drafts(result.data()).stream()
+                                    .map(d -> DraftView.of(d, false)).toList()));
+                        }
                     }
                 }
                 if (round == MAX_ROUNDS - 1) {
@@ -382,6 +405,8 @@ public class ChatService {
             transactions.executeWithoutResult(status -> {
                 messages.exclude(conversationId, turn);
                 messages.setError(conversationId, turn, message);
+                // the turn's cards leave the conversation with it; one already applied stays as it is
+                proposals.dismissTurn(conversationId, turn);
             });
         }
         sink.send("error", Map.of("message", message));
@@ -400,10 +425,10 @@ public class ChatService {
         return Map.of("id", call.id(), "name", call.name(), "label", label, "status", status);
     }
 
-    private ToolContext context(long userId) {
+    private ToolContext context(long userId, long conversationId, int turn, int version) {
         UserSettings settings = users.settings(userId);
         return new ToolContext(userId, LocalDate.now(clock.withZone(properties.timezone())), properties.timezone(),
-                settings.isAiShareDescriptions(), settings.getInflationRate());
+                settings.isAiShareDescriptions(), settings.getInflationRate(), conversationId, turn, version);
     }
 
     static String contextLine(LocalDate today) {
@@ -460,6 +485,25 @@ public class ChatService {
         }
     }
 
+    /** The refs in a tool result's data when it holds proposal cards ({"proposals": [...]}); null for drafts. */
+    private List<String> proposalRefs(String data) {
+        if (data == null || !data.stripLeading().startsWith("{")) {
+            return null;
+        }
+        try {
+            JsonNode node = json.readTree(data).path("proposals");
+            if (!node.isArray()) {
+                return null;
+            }
+            List<String> refs = new ArrayList<>();
+            node.forEach(n -> refs.add(n.asString()));
+            return refs;
+        } catch (JacksonException e) {
+            log.warn("Unreadable proposals in a tool result", e);
+            return List.of();
+        }
+    }
+
     private List<Draft> drafts(String data) {
         try {
             return json.readValue(data, DRAFTS);
@@ -487,23 +531,36 @@ public class ChatService {
         Map<String, Integer> toolItems = new LinkedHashMap<>();
         List<String> refs = new ArrayList<>();
         Map<Integer, List<Draft>> draftsAt = new LinkedHashMap<>();
+        List<String> cardRefs = new ArrayList<>();
+        Map<Integer, Cards> cardsAt = new LinkedHashMap<>();
         for (ConversationMessage m : stored) {
             List<Part> parts = parts(m);
             if (m.getRole() == Role.USER) {
                 for (Part part : parts) {
                     if (part instanceof Part.Text t) {
                         items.add(Item.text("user", m.getTurn(), t.text()));
-                    } else if (part instanceof Part.ToolResult r && !m.isExcluded()) {
+                    } else if (part instanceof Part.ToolResult r) {
+                        List<String> cards = r.data() == null ? null : proposalRefs(r.data());
+                        if (cards != null) {
+                            // a failed turn's cards are shown only if the user applied them
+                            cardRefs.addAll(cards);
+                            cardsAt.put(items.size(), new Cards(cards, m.isExcluded()));
+                            items.add(new Item("proposals", m.getTurn(), null, r.callId(), null, null, null, null, List.of()));
+                        }
+                        if (m.isExcluded()) {
+                            continue;
+                        }
                         Integer index = toolItems.get(r.callId());
                         if (index != null && r.error()) {
                             Item tool = items.get(index);
-                            items.set(index, new Item("tool", tool.turn(), null, tool.toolId(), tool.tool(), tool.label(), "error", null));
+                            items.set(index, new Item("tool", tool.turn(), null, tool.toolId(), tool.tool(), tool.label(), "error", null,
+                                    null));
                         }
-                        if (r.data() != null) {
+                        if (r.data() != null && cards == null) {
                             List<Draft> list = drafts(r.data());
                             list.forEach(d -> refs.add(d.ref()));
                             draftsAt.put(items.size(), list);
-                            items.add(new Item("drafts", m.getTurn(), null, r.callId(), null, null, null, List.of()));
+                            items.add(new Item("drafts", m.getTurn(), null, r.callId(), null, null, null, List.of(), null));
                         }
                     }
                 }
@@ -521,7 +578,8 @@ public class ChatService {
                         }
                     } else if (part instanceof Part.ToolCall call) {
                         toolItems.put(call.id(), items.size());
-                        items.add(new Item("tool", m.getTurn(), null, call.id(), call.name(), FinanceTools.label(call.name()), "done", null));
+                        items.add(new Item("tool", m.getTurn(), null, call.id(), call.name(), FinanceTools.label(call.name()), "done", null,
+                                null));
                     }
                 }
             }
@@ -530,12 +588,22 @@ public class ChatService {
         draftsAt.forEach((index, list) -> {
             Item item = items.get(index);
             items.set(index, new Item("drafts", item.turn(), null, item.toolId(), null, null, null,
-                    list.stream().map(d -> DraftView.of(d, recorded.contains(d.ref()))).toList()));
+                    list.stream().map(d -> DraftView.of(d, recorded.contains(d.ref()))).toList(), null));
         });
+        Map<String, ProposalView> views = proposals.views(userId, cardRefs);
+        cardsAt.forEach((index, cards) -> {
+            Item item = items.get(index);
+            items.set(index, new Item("proposals", item.turn(), null, item.toolId(), null, null, null, null, cards.refs().stream()
+                    .map(views::get).filter(v -> v != null && (!cards.excluded() || "APPLIED".equals(v.status()))).toList()));
+        });
+        items.removeIf(i -> "proposals".equals(i.kind()) && i.proposals().isEmpty());
         Running r = running.get(userId);
         boolean available = providers.client(c.getProviderId(), c.getProviderKind()).isPresent();
         return new View(c.getId(), c.getTitle(), c.getModel(), providers.name(c.getProviderId()).orElse(null), available,
                 c.getTurns() >= MAX_TURNS, r != null && r.conversationId == id, items);
+    }
+
+    private record Cards(List<String> refs, boolean excluded) {
     }
 
     private Set<String> recorded(long userId, Collection<String> refs) {

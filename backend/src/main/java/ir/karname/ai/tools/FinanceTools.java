@@ -10,10 +10,15 @@ import ir.karname.ai.guard.Privacy;
 import ir.karname.ai.llm.JsonSchema;
 import ir.karname.ai.llm.Part;
 import ir.karname.ai.llm.ToolSpec;
+import ir.karname.ai.propose.ProposalKind;
+import ir.karname.ai.propose.ProposalService;
 import ir.karname.budget.BudgetService;
 import ir.karname.budget.BudgetService.BudgetMonth;
 import ir.karname.category.Category;
 import ir.karname.category.CategoryService;
+import ir.karname.cheque.ChequeService;
+import ir.karname.cheque.ChequeService.ChequeView;
+import ir.karname.cheque.ChequeStatus;
 import ir.karname.commodity.CommodityService;
 import ir.karname.commodity.CommodityService.CommodityView;
 import ir.karname.common.jalali.JalaliDate;
@@ -24,6 +29,8 @@ import ir.karname.forecast.ForecastService;
 import ir.karname.forecast.ForecastService.Forecast;
 import ir.karname.goal.GoalService;
 import ir.karname.ledger.AssetClass;
+import ir.karname.loan.LoanService;
+import ir.karname.loan.LoanService.LoanView;
 import ir.karname.ledger.CostBasisService;
 import ir.karname.ledger.DashboardService;
 import ir.karname.ledger.DashboardService.MonthSummary;
@@ -65,10 +72,10 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * What the assistant can look up, all read-only and scoped to one user, plus a calculator and a
- * way to propose transactions for the user to confirm. Figures come from the same services as
- * the app's own screens, so the assistant never computes them itself. Amounts are given with
- * thousands separators and units in the field names; dates are Jalali.
+ * What the assistant can look up, all read-only and scoped to one user, plus a calculator and ways
+ * to propose records (transactions, accounts, loans, budgets…) for the user to confirm. Figures come
+ * from the same services as the app's own screens, so the assistant never computes them itself.
+ * Amounts are given with thousands separators and units in the field names; dates are Jalali.
  */
 @Component
 public class FinanceTools {
@@ -81,11 +88,27 @@ public class FinanceTools {
             AssetClass.SECURITY, "سهام و صندوق", AssetClass.PROPERTY, "ملک و خودرو", AssetClass.OTHER, "سایر");
     private static final Map<String, String> LABELS = new LinkedHashMap<>();
 
-    /** Who is asking, and what the tools may reveal. */
-    public record ToolContext(long userId, LocalDate today, ZoneId zone, boolean shareDescriptions, BigDecimal inflationRate) {
+    /**
+     * The tool set a conversation starts with, which it keeps for its whole life (providers cache the
+     * prompt and tie earlier reasoning to it): 1 is the first fifteen tools, with transaction drafts
+     * as the only proposals; 2 adds loans, cheques and a proposal tool for every section.
+     */
+    public static final int CURRENT_VERSION = 2;
+    private static final int VERSION_1_TOOLS = 15;
+
+    /**
+     * Who is asking, and what the tools may reveal. {@code conversationId} and {@code turn} say where
+     * proposals are shown; without a conversation nothing can be proposed.
+     */
+    public record ToolContext(long userId, LocalDate today, ZoneId zone, boolean shareDescriptions, BigDecimal inflationRate,
+            Long conversationId, int turn, int toolsVersion) {
+
+        public ToolContext(long userId, LocalDate today, ZoneId zone, boolean shareDescriptions, BigDecimal inflationRate) {
+            this(userId, today, zone, shareDescriptions, inflationRate, null, 0, CURRENT_VERSION);
+        }
     }
 
-    /** {@code data} is for the user interface (proposed transactions), never sent to the model. */
+    /** {@code data} is for the user interface (draft transactions, or the refs of proposal cards), never sent to the model. */
     public record Outcome(String content, boolean error, String data) {
     }
 
@@ -108,6 +131,9 @@ public class FinanceTools {
     private final CommodityService commodities;
     private final CostBasisService costBasis;
     private final DraftBuilder drafts;
+    private final LoanService loans;
+    private final ChequeService cheques;
+    private final ProposalService proposals;
     private final Messages messages;
     /** The application's mapper, for data shown in the user interface (decimals as text). */
     private final JsonMapper appJson;
@@ -115,8 +141,8 @@ public class FinanceTools {
 
     public FinanceTools(NetWorthService netWorth, DashboardService dashboard, AccountService accounts, AccountViews accountViews,
             CategoryService categories, TransactionQueryService transactions, ReportService reports, BudgetService budgets, GoalService goals,
-            ForecastService forecasts, CommodityService commodities, CostBasisService costBasis, DraftBuilder drafts, Messages messages,
-            JsonMapper appJson) {
+            ForecastService forecasts, CommodityService commodities, CostBasisService costBasis, DraftBuilder drafts, LoanService loans,
+            ChequeService cheques, ProposalService proposals, Messages messages, JsonMapper appJson) {
         this.netWorth = netWorth;
         this.dashboard = dashboard;
         this.accounts = accounts;
@@ -130,6 +156,9 @@ public class FinanceTools {
         this.commodities = commodities;
         this.costBasis = costBasis;
         this.drafts = drafts;
+        this.loans = loans;
+        this.cheques = cheques;
+        this.proposals = proposals;
         this.messages = messages;
         this.appJson = appJson;
         register();
@@ -238,11 +267,41 @@ public class FinanceTools {
                 JsonSchema.object(null).required("transactions", JsonSchema.array("The transactions", DraftBuilder.proposalSchema()).maxItems(20))
                         .build(),
                 this::propose);
+        // version 2 from here on
+        add("list_loans", "فهرست وام‌ها",
+                "The user's loans with ids: amount, rate, remaining debt, installments paid and overdue, and the next installment's "
+                        + "number, date and amount. Use the ids for propose_loan_payment.",
+                JsonSchema.empty(), this::loans);
+        add("list_cheques", "فهرست چک‌ها",
+                "The user's cheques with ids, newest due date first: direction, status, amount, due date and who. Use the ids for "
+                        + "propose_cheque_status.",
+                JsonSchema.object(null).optional("include_settled", JsonSchema.bool("Also cheques already cleared, bounced or cancelled"))
+                        .build(),
+                this::cheques);
+        for (ProposalKind<?> kind : proposals.kinds()) {
+            addProposal(kind);
+        }
     }
 
-    /** All tools, in a fixed order: they are part of the cached prompt. */
+    private <P> void addProposal(ProposalKind<P> kind) {
+        add(kind.tool(), kind.label(), kind.description(), kind.input(), (ctx, in) -> {
+            ProposalService.Proposed proposed = proposals.propose(ctx.userId(), ctx.today(), ctx.conversationId(), ctx.turn(), kind, in);
+            return new Result(proposed.content(), Map.of("proposals", proposed.refs()));
+        });
+    }
+
+    /** The current tools, in a fixed order: they are part of the cached prompt. */
     public List<ToolSpec> specs() {
-        return tools.values().stream().map(Tool::spec).toList();
+        return specs(CURRENT_VERSION);
+    }
+
+    /** The tools of a version, for a conversation started with it. */
+    public List<ToolSpec> specs(int version) {
+        return tools.values().stream().limit(allowed(version)).map(Tool::spec).toList();
+    }
+
+    private long allowed(int version) {
+        return version <= 1 ? VERSION_1_TOOLS : tools.size();
     }
 
     /** A Persian label of a tool for the conversation view. */
@@ -253,7 +312,7 @@ public class FinanceTools {
     /** Runs a call after checking its input against the tool's schema; failures become error results the model can act on. */
     public Outcome run(ToolContext ctx, Part.ToolCall call) {
         Tool tool = tools.get(call.name());
-        if (tool == null) {
+        if (tool == null || tools.keySet().stream().limit(allowed(ctx.toolsVersion())).noneMatch(call.name()::equals)) {
             return error("Unknown tool: " + call.name());
         }
         JsonNode input;
@@ -722,6 +781,43 @@ public class FinanceTools {
             out.put("inflation_assumed", ctx.inflationRate().stripTrailingZeros().toPlainString() + "% a year (the user's setting)");
         }
         return new Result(out, null);
+    }
+
+    private Result loans(ToolContext ctx, JsonNode in) {
+        Map<Long, String> names = accounts.list(ctx.userId()).stream().collect(Collectors.toMap(Account::getId, Account::getName));
+        List<LoanView> list = loans.list(ctx.userId());
+        return new Result(obj("loans", list.stream().map(l -> obj(
+                "id", l.id(),
+                "name", Privacy.mask(l.name()),
+                "bank", l.bank() == null ? null : l.bank().name(),
+                "principal_toman", money(l.principal()),
+                "annual_rate_percent", l.annualRate().stripTrailingZeros().toPlainString(),
+                "installments", l.termMonths(),
+                "paid_installments", l.paidCount(),
+                "remaining_debt_toman", money(l.outstanding() == null ? null : l.outstanding().abs()),
+                "overdue_installments", l.overdueCount() > 0 ? l.overdueCount() : null,
+                "overdue_toman", l.overdueCount() > 0 ? money(l.overdueAmount()) : null,
+                "next_installment", l.next() == null ? null : obj("number", l.next().number(), "due", date(l.next().dueDate()),
+                        "amount_toman", money(l.next().amount())),
+                "payment_account", l.paymentAccountId() == null ? null : Privacy.mask(names.get(l.paymentAccountId())),
+                "last_due", date(l.endDate()))).toList()), null);
+    }
+
+    private Result cheques(ToolContext ctx, JsonNode in) {
+        boolean settled = in.path("include_settled").asBoolean(false);
+        Map<Long, String> names = accounts.list(ctx.userId()).stream().collect(Collectors.toMap(Account::getId, Account::getName));
+        List<ChequeView> list = cheques.list(ctx.userId()).stream().filter(c -> settled || c.status() == ChequeStatus.PENDING)
+                .sorted(java.util.Comparator.comparing(ChequeView::dueDate).reversed()).limit(100).toList();
+        return new Result(obj("cheques", list.stream().map(c -> obj(
+                "id", c.id(),
+                "direction", c.direction().name(),
+                "status", c.status().name(),
+                "amount_toman", money(c.amount()),
+                "due", date(c.dueDate()),
+                "overdue", flag(c.overdue()),
+                "counterparty", c.counterparty() == null ? null : Privacy.mask(c.counterparty()),
+                "description", ctx.shareDescriptions() && c.description() != null ? Privacy.mask(c.description()) : null,
+                "account", c.accountId() == null ? null : Privacy.mask(names.get(c.accountId())))).toList()), null);
     }
 
     private Result propose(ToolContext ctx, JsonNode in) {

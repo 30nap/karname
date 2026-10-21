@@ -72,6 +72,9 @@ final class FakeBehavior {
 
     private static LlmResponse chooseTool(LlmRequest request, String question) {
         String q = PersianText.normalize(PersianText.normalizeDigits(question));
+        if (q.contains("وام") && q.contains("درصد") && request.tools().stream().anyMatch(t -> t.name().equals("propose_loan"))) {
+            return FakeLlm.toolCalls(FakeLlm.call("propose_loan", JSON.writeValueAsString(loan(q, today(request)))));
+        }
         if (q.contains("ثبت") && NUMBER.matcher(q).find()) {
             List<Map<String, Object>> transactions = parseNote(q, today(request));
             return FakeLlm.toolCalls(FakeLlm.call("propose_transactions", JSON.writeValueAsString(Map.of("transactions", transactions))));
@@ -164,9 +167,35 @@ final class FakeBehavior {
                 }
             }
             case "propose_transactions" -> out.append("پیش‌نویس تراکنش‌ها آماده است؛ آن‌ها را پایین همین پیام بررسی و تأیید کنید.");
-            default -> out.append("اطلاعات دریافت شد.");
+            default -> out.append(tool.startsWith("propose_")
+                    ? "پیشنهاد آماده است؛ کارت پایین همین پیام را بررسی کنید و اگر درست است «ثبت» را بزنید. تا تأیید نکنید چیزی ثبت نمی‌شود."
+                    : "اطلاعات دریافت شد.");
         }
         return out.toString().strip();
+    }
+
+    private static final Pattern RATE = Pattern.compile("(\\d+(?:\\.\\d+)?)\\s*درصد");
+    private static final Pattern TERM = Pattern.compile("(\\d+)\\s*(?:قسط|ماه)");
+    private static final Pattern PRINCIPAL = Pattern.compile("(\\d+(?:\\.\\d+)?)\\s*(میلیون|میلیارد)");
+
+    /** «وام ۲۰۰ میلیونی با سود ۲۳ درصد در ۳۶ قسط»: the first installment a month from today unless a date is given. */
+    private static Map<String, Object> loan(String q, JalaliDate today) {
+        Map<String, Object> loan = new LinkedHashMap<>();
+        Matcher principal = PRINCIPAL.matcher(q);
+        if (principal.find()) {
+            loan.put("principal", new BigDecimal(principal.group(1)));
+            loan.put("principal_scale", principal.group(2).equals("میلیارد") ? "BILLION" : "MILLION");
+        } else {
+            Matcher amount = AMOUNT.matcher(q);
+            loan.put("principal", amount.find() ? new BigDecimal(amount.group().replaceAll("[,٬]", "")) : BigDecimal.valueOf(100_000_000));
+        }
+        Matcher rate = RATE.matcher(q);
+        loan.put("annual_rate_percent", rate.find() ? new BigDecimal(rate.group(1)) : BigDecimal.ZERO);
+        Matcher term = TERM.matcher(q);
+        loan.put("term_months", term.find() ? Integer.parseInt(term.group(1)) : 12);
+        Matcher date = FULL_DATE.matcher(q);
+        loan.put("first_due_date", date.find() ? date.group(1) + "/" + date.group(2) + "/" + date.group(3) : today.plusMonths(1).toString());
+        return loan;
     }
 
     // ---------------------------------------------------------------- quick add

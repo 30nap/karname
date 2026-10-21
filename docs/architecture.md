@@ -63,13 +63,29 @@ depend on reports or AI; the LLM adapters depend on nothing but their port).
   back through a listener. Three adapters implement it: the official Anthropic SDK, a hand-written
   OpenAI-compatible client (Chat Completions with streaming, tool calls and JSON Schema), and a
   deterministic fake for tests and demos.
-- **Tools.** Fifteen in all: twelve read the user's data (overview, accounts, categories,
-  transactions, totals by category and by month, budgets, net-worth history, allocation, goals,
-  obligations, prices); the others are an exact calculator, a savings projection, and
-  `propose_transactions`, which only returns drafts. Inputs are validated against their schema before running; tool results are
-  JSON with Jalali dates and Toman amounts.
+- **Tools.** Fourteen read the user's data (overview, accounts, categories, transactions, totals by
+  category and by month, budgets, net-worth history, allocation, goals, obligations, prices, loans,
+  cheques); two calculate (an exact calculator, a savings projection). The rest only propose:
+  `propose_transactions` returns drafts, and one tool per section (`propose_account`,
+  `propose_loan`, `propose_loan_payment`, `propose_goal`, `propose_budgets`, `propose_cheque`,
+  `propose_cheque_status`, `propose_recurring`, `propose_category`, `propose_price`,
+  `propose_security`) prepares a card. Inputs are validated against their schema before running;
+  tool results are JSON with Jalali dates and Toman amounts.
+- **Proposals.** The model names accounts, categories and units by id or by the name the user
+  said (`ai/propose/Resolver` matches them against that user's records only; no match or several
+  go back to the model with the candidates) and gives amounts as said, with a scale word. The
+  request is then run through the section's own service in a transaction that is always rolled
+  back: business rules exist once, and the card's figures (installments, interest, a goal's monthly
+  need, next dates) are the service's. The request and card are stored in `ai_proposals`; only the
+  user's click (`POST /api/v1/ai/proposals/{ref}/apply`) applies it, under a row lock, so applying
+  twice records once. Cards expire after seven days; a failed turn's cards are dismissed; the next
+  turn tells the model what the user confirmed or dismissed. A security's symbol is looked up on
+  the exchange when proposed and followed only when applied.
+- **Tool sets per conversation.** The tools and system prompt are part of the cached prompt and
+  Claude ties earlier reasoning to them, so a conversation keeps the set it started with
+  (`ai_conversations.tools_version`): older conversations keep the first fifteen tools.
 - **Chat.** A loop of model calls and tool runs (at most ten rounds, four minutes), streamed to the
-  browser as events (`start`, `tool`, `text`, `drafts`, `done`, `error`). Conversations are
+  browser as events (`start`, `tool`, `text`, `drafts`, `proposals`, `done`, `error`). Conversations are
   append-only and stored with each provider's native message format, so a provider gets back
   exactly what it produced (Claude's thinking blocks included); a conversation stays on the
   provider and model it started with. A failed turn is kept but excluded from what is sent next.

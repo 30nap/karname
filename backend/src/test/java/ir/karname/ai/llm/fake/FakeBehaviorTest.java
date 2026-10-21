@@ -46,6 +46,20 @@ class FakeBehaviorTest {
         assertThat(answer.text()).contains("پاسخ آزمایشی");
     }
 
+    @Test
+    void proposesALoanForDemos() {
+        ToolSpec loan = new ToolSpec("propose_loan", "Loan", JsonSchema.empty());
+        LlmRequest request = new LlmRequest(FakeLlm.MODEL, "system", List.of(new LlmMessage.User(List.of(
+                new Part.Context("امروز: سه‌شنبه ۱۴ مهر ۱۴۰۵ (1405/07/14)"),
+                new Part.Text("یک وام ۲۰۰ میلیونی با سود ۲۳ درصد در ۳۶ قسط گرفتم")))), List.of(loan), null, Effort.LOW, 1024);
+        LlmResponse response = FakeBehavior.respond(request);
+        assertThat(response.toolCalls()).singleElement().satisfies(call -> {
+            assertThat(call.name()).isEqualTo("propose_loan");
+            assertThat(call.input()).contains("\"principal\":200").contains("\"principal_scale\":\"MILLION\"")
+                    .contains("\"annual_rate_percent\":23").contains("\"term_months\":36").contains("\"first_due_date\":\"1405/08/14\"");
+        });
+    }
+
     private static LlmRequest request(List<ToolSpec> tools, String question) {
         return new LlmRequest(FakeLlm.MODEL, "system", List.of(new LlmMessage.User(List.of(new Part.Text(question)))), tools, null,
                 Effort.LOW, 1024);

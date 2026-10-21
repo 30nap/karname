@@ -65,7 +65,7 @@ public class CaptureService {
      */
     private static final Pattern IDENTIFIER = Pattern.compile(
             "(?<![\\d,٬])[0-9.\\-]{0,32}[*xX][0-9*xX.\\-]{0,32}?\\d{4}(?![\\d,٬])|(?<![\\d,٬./-])\\d{8,}+(?![\\d,٬])");
-    private static final Map<Bank, String> BANK_NAMES = bankNames();
+    private static final Map<Bank, String> BANK_NAMES = BankNames.NAMES;
 
     private final DraftBuilder drafts;
     private final StructuredCalls calls;
@@ -343,41 +343,5 @@ public class CaptureService {
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException(e);
         }
-    }
-
-    /** Names as they appear in SMS; words that are also common Persian words carry «بانک». */
-    private static Map<Bank, String> bankNames() {
-        Map<Bank, String> names = new LinkedHashMap<>();
-        names.put(Bank.MELLI, "ملی");
-        names.put(Bank.MELLAT, "ملت");
-        names.put(Bank.SADERAT, "صادرات");
-        names.put(Bank.TEJARAT, "تجارت");
-        names.put(Bank.SEPAH, "سپه");
-        names.put(Bank.KESHAVARZI, "کشاورزی");
-        names.put(Bank.MASKAN, "مسکن");
-        names.put(Bank.REFAH, "رفاه");
-        names.put(Bank.POST, "پست بانک");
-        names.put(Bank.TOSEE_SADERAT, "توسعه صادرات");
-        names.put(Bank.TOSEE_TAAVON, "توسعه تعاون");
-        names.put(Bank.SANAT_MADAN, "صنعت و معدن");
-        names.put(Bank.PASARGAD, "پاسارگاد");
-        names.put(Bank.SAMAN, "سامان");
-        names.put(Bank.PARSIAN, "پارسیان");
-        names.put(Bank.EGHTESAD_NOVIN, "اقتصاد نوین");
-        names.put(Bank.KARAFARIN, "کارآفرین");
-        names.put(Bank.SINA, "بانک سینا");
-        names.put(Bank.SHAHR, "بانک شهر");
-        names.put(Bank.DAY, "بانک دی");
-        names.put(Bank.SARMAYEH, "بانک سرمایه");
-        names.put(Bank.AYANDEH, "بانک آینده");
-        names.put(Bank.GARDESHGARI, "گردشگری");
-        names.put(Bank.IRAN_ZAMIN, "ایران زمین");
-        names.put(Bank.KHAVARMIANEH, "خاورمیانه");
-        names.put(Bank.MEHR_IRAN, "مهر ایران");
-        names.put(Bank.RESALAT, "رسالت");
-        names.put(Bank.MELAL, "بانک ملل");
-        names.put(Bank.NOOR, "بانک نور");
-        names.put(Bank.BLU, "بلو");
-        return names;
     }
 }

@@ -15,6 +15,7 @@ import { useFormat } from '@/app/preferences'
 import { AiMarkdown } from '@/features/ai/Markdown'
 import { AiUnavailable } from '@/features/ai/AiUnavailable'
 import { DraftList } from '@/features/ai/DraftList'
+import { ProposalList } from '@/features/ai/ProposalList'
 import { conversationQuery, stopConversation, useAiStatus, useConversation, useConversations, useDeleteConversation, useRenameConversation } from '@/features/ai/api'
 import { ApiError } from '@/lib/api/client'
 import type { ChatItem, ConversationSummary } from '@/lib/api/types'
@@ -31,6 +32,8 @@ const SUGGESTIONS = [
   'با این روند، کی به هدف‌هایم می‌رسم؟',
   'تا آخر ماه چه قسط و چکی دارم؟',
   'دیروز ناهار ۱۸۰ تومن خرج کردم، ثبتش کن',
+  'یک وام ۲۰۰ میلیونی از بانک ملی با سود ۲۳ درصد در ۳۶ قسط گرفتم، ثبتش کن',
+  'برای خوراک ماهی ۸ میلیون بودجه بگذار',
 ]
 
 /** The turn being written right now, before it is stored. */
@@ -59,6 +62,9 @@ function applyEvent(turn: LiveTurn, event: ChatEvent): LiveTurn {
     }
     case 'drafts':
       items.push({ kind: 'drafts', turn: 0, toolId: event.toolId, drafts: event.drafts })
+      return { ...turn, items }
+    case 'proposals':
+      items.push({ kind: 'proposals', turn: 0, toolId: event.toolId, proposals: event.proposals })
       return { ...turn, items }
     case 'notice':
       return { ...turn, notice: event.message }
@@ -327,7 +333,9 @@ function Welcome({ onSuggest }: { onSuggest: (text: string) => void }) {
       <div className="space-y-1">
         <h2 className="text-lg font-bold">سلام! دستیار مالی شما هستم</h2>
         <p className="text-sm text-muted-foreground">
-          درباره‌ی هزینه‌ها، دارایی‌ها، بودجه و اهدافتان بپرسید. ارقام را از خود کارنامه می‌خوانم و بدون تأیید شما چیزی ثبت نمی‌کنم.
+          درباره‌ی هزینه‌ها، دارایی‌ها، بودجه و اهدافتان بپرسید، یا بگویید چه چیزی ثبت کنم: تراکنش، حساب، وام و قسط، چک، بودجه، هدف،
+          تراکنش تکراری یا سهام. ارقام را از خود کارنامه می‌خوانم و هر چیزی را اول به‌صورت کارت پیشنهاد می‌کنم؛ بدون تأیید شما چیزی ثبت
+          نمی‌شود.
         </p>
       </div>
       <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
@@ -355,8 +363,9 @@ function UserBubble({ text }: { text: string }) {
 
 function AssistantBlock({ items, writing, notice, error }: { items: ChatItem[]; writing?: boolean; notice?: string; error?: string }) {
   const hasText = items.some((i) => i.kind === 'assistant' && i.text)
-  // drafts close the answer, under the text that explains them
+  // drafts and proposals close the answer, under the text that explains them
   const drafts = items.filter((i) => i.kind === 'drafts' && i.drafts?.length)
+  const proposals = items.filter((i) => i.kind === 'proposals' && i.proposals?.length)
   // the assistant's answer: on the left, facing the user's messages
   return (
     <div className="flex justify-end" data-side="assistant">
@@ -377,6 +386,7 @@ function AssistantBlock({ items, writing, notice, error }: { items: ChatItem[]; 
           <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />در حال بررسی…</p>
         ) : null}
         {drafts.map((item, index) => <DraftList key={index} drafts={item.drafts ?? []} />)}
+        {proposals.map((item, index) => <ProposalList key={index} proposals={item.proposals ?? []} />)}
         {notice ? <Alert variant="warning">{notice}</Alert> : null}
         {error ? <Alert variant="destructive"><X />{error}</Alert> : null}
       </div>

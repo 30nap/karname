@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -51,11 +52,23 @@ class FinanceToolsIntegrationTest extends FinanceTestSupport {
 
     @Test
     void offersAFixedSetOfToolsWithClosedSchemas() {
-        assertThat(tools.specs()).extracting(s -> s.name()).containsExactly("get_financial_overview", "list_accounts", "list_categories",
+        List<String> first = List.of("get_financial_overview", "list_accounts", "list_categories",
                 "search_transactions", "summarize_by_category", "get_monthly_totals", "get_budget_status", "get_net_worth_history",
                 "get_asset_allocation", "get_goals", "get_obligations", "get_prices", "calculate", "project_savings", "propose_transactions");
+        // conversations started before the proposal tools keep the first set
+        assertThat(tools.specs(1)).extracting(s -> s.name()).containsExactlyElementsOf(first);
+        List<String> current = new java.util.ArrayList<>(first);
+        current.addAll(List.of("list_loans", "list_cheques", "propose_account", "propose_loan", "propose_loan_payment", "propose_goal",
+                "propose_budgets", "propose_cheque", "propose_cheque_status", "propose_recurring", "propose_category", "propose_price",
+                "propose_security"));
+        assertThat(tools.specs()).extracting(s -> s.name()).containsExactlyElementsOf(current);
         assertThat(tools.specs()).allSatisfy(s -> assertThat(s.input().toMap()).containsEntry("additionalProperties", false));
         assertThat(FinanceTools.label("get_budget_status")).isEqualTo("وضعیت بودجه");
+        assertThat(FinanceTools.label("propose_loan")).isEqualTo("پیشنهاد وام");
+        // a version-1 conversation cannot call what it was never offered
+        Outcome refused = tools.run(new ToolContext(user.id(), TODAY, ZoneId.of("Asia/Tehran"), true, null, null, 1, 1),
+                new Part.ToolCall("call_1", "list_loans", "{}"));
+        assertThat(refused.error()).isTrue();
     }
 
     @Test

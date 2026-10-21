@@ -62,6 +62,10 @@ public class DraftBuilder {
         Scale(BigDecimal factor) {
             this.factor = factor;
         }
+
+        public BigDecimal factor() {
+            return factor;
+        }
     }
 
     /** What the amount is counted in: Toman, Rial, or the account's own unit (dollars, grams…). */

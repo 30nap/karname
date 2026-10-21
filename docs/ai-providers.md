@@ -17,7 +17,12 @@ Karname works completely without AI. With a service configured, it adds:
   sums); the model reads them and explains.
 - **Nothing is written without you.** Quick add, SMS import and the chat's "record this" all
   produce drafts; you check, edit and confirm them. Each draft has a reference, so recording it
-  twice does nothing.
+  twice does nothing. In chat the assistant can propose a record in any section (an account, a
+  loan or an installment paid, a goal, budgets, a cheque or its clearing, a recurring transaction, a
+  category, a price, shares): it is checked by the section's own service without being saved and
+  shown as a card with every value and what else will happen (a loan's account and deposit, for
+  example). Only your «ثبت» saves it, exactly as shown; to change something, tell the assistant and
+  it proposes a corrected card in place of the old one.
 - **Amounts are converted in code.** Rial in SMS becomes Toman, and "۱۸۰ تومن" for lunch becomes
   180,000 while "۸۰۰ تومن" for a car becomes 800 million: the model states the scale with a
   confidence, and doubtful drafts are flagged.

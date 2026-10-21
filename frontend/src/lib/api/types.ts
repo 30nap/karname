@@ -797,7 +797,7 @@ export interface ConversationSummary {
   updatedAt: string
 }
 
-export type ChatItemKind = 'user' | 'assistant' | 'tool' | 'drafts' | 'error'
+export type ChatItemKind = 'user' | 'assistant' | 'tool' | 'drafts' | 'proposals' | 'error'
 export type ToolStatus = 'running' | 'done' | 'error'
 
 export interface ChatItem {
@@ -809,6 +809,38 @@ export interface ChatItem {
   label?: string | null
   status?: ToolStatus | null
   drafts?: AiDraft[] | null
+  proposals?: AiProposal[] | null
+}
+
+/** How a card line's value is written: MONEY in Toman, QUANTITY in {@link CardLine.unit}, DATE as ISO. */
+export type CardLineFormat = 'TEXT' | 'MONEY' | 'QUANTITY' | 'DATE' | 'NUMBER' | 'PERCENT'
+
+export interface CardLine {
+  label: string
+  value: string
+  format: CardLineFormat
+  unit: string | null
+  /** The figure the card leads with, also spelled out in words. */
+  main: boolean
+}
+
+export type ProposalStatus = 'PENDING' | 'APPLIED' | 'DISMISSED' | 'REPLACED' | 'EXPIRED'
+
+export type ProposalKind = 'ACCOUNT' | 'LOAN' | 'LOAN_PAYMENT' | 'GOAL' | 'BUDGET' | 'CHEQUE' | 'CHEQUE_STATUS' | 'RECURRING'
+  | 'CATEGORY' | 'PRICE' | 'SECURITY'
+
+/** Something the assistant proposed to record; only the user's confirmation records it. */
+export interface AiProposal {
+  ref: string
+  kind: ProposalKind
+  title: string
+  lines: CardLine[]
+  effects: string[]
+  warnings: string[]
+  status: ProposalStatus
+  /** Where to see what was recorded, once applied. */
+  link: string | null
+  expiresAt: string
 }
 
 export interface ConversationView {

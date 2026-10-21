@@ -1,5 +1,5 @@
 import { API_BASE, ApiError, readCookie } from '@/lib/api/client'
-import type { AiDraft, ToolStatus } from '@/lib/api/types'
+import type { AiDraft, AiProposal, ToolStatus } from '@/lib/api/types'
 
 /** What the server reports while a reply is written. */
 export type ChatEvent =
@@ -7,6 +7,7 @@ export type ChatEvent =
   | { type: 'text'; delta: string }
   | { type: 'tool'; id: string; name: string; label: string; status: ToolStatus }
   | { type: 'drafts'; toolId: string; drafts: AiDraft[] }
+  | { type: 'proposals'; toolId: string; proposals: AiProposal[] }
   | { type: 'notice'; message: string }
   | { type: 'error'; message: string }
   | { type: 'done'; turn: number }
@@ -31,7 +32,7 @@ export function parseEvent(block: string): ChatEvent | null {
   } catch {
     return null
   }
-  const known = ['start', 'text', 'tool', 'drafts', 'notice', 'error', 'done']
+  const known = ['start', 'text', 'tool', 'drafts', 'proposals', 'notice', 'error', 'done']
   return known.includes(name) ? ({ type: name, ...(payload as object) } as ChatEvent) : null
 }
 
